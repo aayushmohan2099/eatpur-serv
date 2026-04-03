@@ -1,32 +1,61 @@
-# blog/signals.py
+"""
+blog/signals.py
+"""
 
-from django.db.models.signals import post_save, post_delete
+from django.db.models.signals import post_save
 from django.dispatch import receiver
-from .models import BlogReaction, BlogComment
+from django.utils import timezone
 
+from .models import Blog, BlogBlock
 
-@receiver(post_save, sender=BlogReaction)
-def update_reaction_counts(sender, instance, **kwargs):
+# ===========================================================================
+# 📖 AUTO-CALCULATE READ TIME
+# ===========================================================================
+
+@receiver(post_save, sender=BlogBlock)
+def update_blog_read_time(sender, instance, **kwargs):
+    """
+    Recalculate blog read time whenever a block is created/updated.
+    Logic:
+    - Count words from text-like blocks
+    - Avg reading speed = 200 words/min
+    - Minimum = 1 minute
+    """
+
     blog = instance.blog
 
-    likes = blog.reactions.filter(
-        reaction_type='like',
-        is_active=True
-    ).count()
+    # Only active (non-deleted) blocks
+    blocks = blog.blocks.filter(is_active=True)
 
-    dislikes = blog.reactions.filter(
-        reaction_type='dislike',
-        is_active=True
-    ).count()
+    total_words = 0
 
-    blog.likes_count = likes
-    blog.dislikes_count = dislikes
-    blog.save(update_fields=['likes_count', 'dislikes_count'])
+    for block in blocks:
+        if block.type in ("text", "quote", "code") and block.content:
+            total_words += len(block.content.split())
+
+    read_time = max(1, total_words // 200)
+
+    # Avoid unnecessary DB write
+    if blog.read_time_minutes != read_time:
+        blog.read_time_minutes = read_time
+        blog.save(update_fields=["read_time_minutes"])
 
 
-@receiver(post_save, sender=BlogComment)
-def update_comment_count(sender, instance, created, **kwargs):
-    blog = instance.blog
-    count = blog.comments.filter(is_active=True).count()
-    blog.comments_count = count
-    blog.save(update_fields=['comments_count'])
+# ===========================================================================
+# 🕒 ENSURE PUBLISHED TIMESTAMP CONSISTENCY
+# ===========================================================================
+
+@receiver(post_save, sender=Blog)
+def ensure_published_timestamp(sender, instance, created, **kwargs):
+    """
+    Safety fallback:
+    Ensures published_at is always set when blog is marked as published.
+
+    NOTE:
+    Primary logic should remain in Blog.publish()
+    This is just a guard.
+    """
+
+    if instance.is_published and not instance.published_at:
+        instance.published_at = timezone.now()
+        instance.save(update_fields=["published_at"])

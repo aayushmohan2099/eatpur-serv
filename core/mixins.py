@@ -1,14 +1,18 @@
-# core/mixins.py
+"""
+core/mixins.py
+==============
+Shared base mixin for all models across the project.
+Provides: UUID primary key, timestamps, IP tracking, and soft-delete support.
+"""
 
 import uuid
 from django.db import models
 from django.utils import timezone
 
 
-def generate_urid():
-    return str(uuid.uuid4())
-
-
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 def get_client_ip(request):
     """Extract real IP from request"""
     x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
@@ -18,80 +22,92 @@ def get_client_ip(request):
 
     return request.META.get('REMOTE_ADDR')
 
+# ---------------------------------------------------------------------------
+# Managers
+# ---------------------------------------------------------------------------
 
 class ActiveManager(models.Manager):
-    def get_queryset(self):
-        return super().get_queryset().filter(is_active=True)
+    """Default manager — returns only non-deleted records."""
 
+    def get_queryset(self):
+        return super().get_queryset().filter(is_deleted=False)
+
+
+class AllObjectsManager(models.Manager):
+    """Unfiltered manager — returns every record including soft-deleted ones."""
+
+    def get_queryset(self):
+        return super().get_queryset()
+
+# ---------------------------------------------------------------------------
+# Mixin
+# ---------------------------------------------------------------------------
 
 class SoftDeleteMixin(models.Model):
-    # 🔑 Unique ID (like your TH_urid)
-    urid = models.CharField(
-        max_length=36,
+    """
+    Abstract base mixin applied to EVERY model in this project.
+
+    Fields
+    ------
+    urid          : Universally unique record identifier (UUID4).
+    created_at    : Auto-set on first save.
+    updated_at    : Auto-updated on every save.
+    deleted_at    : Set when the record is soft-deleted; NULL means active.
+    is_deleted    : Boolean flag for fast filtering.
+    created_by_ip : IP address of the client that created the record.
+    updated_by_ip : IP address of the client that last modified the record.
+    """
+
+    urid = models.UUIDField(
+        default=uuid.uuid4,
+        editable=False,
         unique=True,
         db_index=True,
-        default=generate_urid,
-        editable=False
+        verbose_name="Unique Record ID",
     )
 
-    # ⏱️ Time tracking
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    deleted_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Created At")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Updated At")
+    deleted_at = models.DateTimeField(
+        null=True, blank=True, verbose_name="Deleted At"
+    )
 
-    # 🌐 IP tracking
-    created_ip = models.GenericIPAddressField(null=True, blank=True)
-    updated_ip = models.GenericIPAddressField(null=True, blank=True)
-    deleted_ip = models.GenericIPAddressField(null=True, blank=True)
+    is_deleted = models.BooleanField(
+        default=False, db_index=True, verbose_name="Is Deleted"
+    )
 
-    # 🔥 Soft delete flag
-    is_active = models.BooleanField(default=True)
+    created_by_ip = models.GenericIPAddressField(
+        null=True, blank=True, verbose_name="Created By IP"
+    )
+    updated_by_ip = models.GenericIPAddressField(
+        null=True, blank=True, verbose_name="Updated By IP"
+    )
 
+    # ------------------------------------------------------------------
     # Managers
-    objects = ActiveManager()        # only active
-    all_objects = models.Manager()  # includes deleted
+    # ------------------------------------------------------------------
+    objects = ActiveManager()        # default: active records only
+    all_objects = AllObjectsManager()  # includes soft-deleted records
+
+    # ------------------------------------------------------------------
+    # Soft-delete helpers
+    # ------------------------------------------------------------------
+
+    def soft_delete(self, ip: str | None = None):
+        """Mark record as deleted without removing from DB."""
+        self.is_deleted = True
+        self.deleted_at = timezone.now()
+        if ip:
+            self.updated_by_ip = ip
+        self.save(update_fields=["is_deleted", "deleted_at", "updated_by_ip", "updated_at"])
+
+    def restore(self, ip: str | None = None):
+        """Restore a previously soft-deleted record."""
+        self.is_deleted = False
+        self.deleted_at = None
+        if ip:
+            self.updated_by_ip = ip
+        self.save(update_fields=["is_deleted", "deleted_at", "updated_by_ip", "updated_at"])
 
     class Meta:
         abstract = True
-
-    # ------------------------
-    # 🔥 SOFT DELETE
-    # ------------------------
-    def soft_delete(self, request=None):
-        self.deleted_at = timezone.now()
-        self.is_active = False
-
-        if request:
-            self.deleted_ip = get_client_ip(request)
-
-        self.save()
-
-    # ------------------------
-    # 🔥 RESTORE
-    # ------------------------
-    def restore(self):
-        self.deleted_at = None
-        self.is_active = True
-        self.save()
-
-    # ------------------------
-    # 💀 HARD DELETE
-    # ------------------------
-    def hard_delete(self):
-        super().delete()
-
-    # ------------------------
-    # AUTO TRACK IP ON SAVE
-    # ------------------------
-    def save(self, *args, **kwargs):
-        request = kwargs.pop('request', None)
-
-        if request:
-            ip = get_client_ip(request)
-
-            if not self.pk:
-                self.created_ip = ip
-
-            self.updated_ip = ip
-
-        super().save(*args, **kwargs)
