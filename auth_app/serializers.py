@@ -27,6 +27,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from auth_app.models import CaptchaChallenge, LoginAttempt
+from user.models import Role
 from core.mixins import get_client_ip
 
 logger = logging.getLogger("auth_app")
@@ -224,12 +225,27 @@ class RegisterSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(errors)
         return value
 
-    def validate_mobile(self, value: str) -> str:
+    def validate_email(self, value):
+        if CustomUser.objects.filter(email=value).exists():
+            raise serializers.ValidationError("Email already registered.")
+        return value
+
+
+    def validate_username(self, value):
+        if CustomUser.objects.filter(username=value).exists():
+            raise serializers.ValidationError("Username already taken.")
+        return value
+
+
+    def validate_mobile(self, value):
         digits = "".join(c for c in value if c.isdigit())
+
         if not (10 <= len(digits) <= 15):
-            raise serializers.ValidationError(
-                "Mobile number must be between 10 and 15 digits."
-            )
+            raise serializers.ValidationError("Mobile number must be 10–15 digits.")
+
+        if CustomUser.objects.filter(mobile=value).exists():
+            raise serializers.ValidationError("Mobile already registered.")
+
         return value
 
     # ------------------------------------------------------------------
@@ -257,7 +273,8 @@ class RegisterSerializer(serializers.ModelSerializer):
         validated_data.pop("captcha_id")
         validated_data.pop("captcha_answer")
         password = validated_data.pop("password")
-
+        customer_role = Role.objects.get(role_name="CUSTOMER")
+        validated_data["role"] = customer_role
         request = self.context.get("request")
         ip = get_client_ip(request) if request else None
 

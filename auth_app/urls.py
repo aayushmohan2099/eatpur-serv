@@ -31,7 +31,6 @@ from .views import (
 )
 
 urlpatterns = [
-    path("captcha/",  CaptchaView.as_view(),      name="auth-captcha"),
     path("login/",    LoginView.as_view(),         name="auth-login"),
     path("logout/",   LogoutView.as_view(),        name="auth-logout"),
     path("refresh/",  TokenRefreshView.as_view(),  name="auth-refresh"),

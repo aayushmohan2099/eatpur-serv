@@ -1,16 +1,34 @@
 """
 WSGI config for core project.
 
-It exposes the WSGI callable as a module-level variable named ``application``.
+Switch between environments using DJANGO_SETTINGS_MODULE.
 
-For more information on this file, see
-https://docs.djangoproject.com/en/4.2/howto/deployment/wsgi/
+Examples:
+    export DJANGO_SETTINGS_MODULE=core.settings.development
+    export DJANGO_SETTINGS_MODULE=core.settings.production
 """
 
 import os
-
 from django.core.wsgi import get_wsgi_application
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core.settings')
+# ---------------------------------------------------------------------------
+# DEFAULT ENVIRONMENT
+# ---------------------------------------------------------------------------
+
+# ✅ CURRENT: Development
+os.environ.setdefault(
+    "DJANGO_SETTINGS_MODULE",
+    "core.settings.development"
+)
+
+# ❌ PRODUCTION (uncomment when deploying)
+# os.environ.setdefault(
+#     "DJANGO_SETTINGS_MODULE",
+#     "core.settings.production"
+# )
+
+# ---------------------------------------------------------------------------
+# WSGI Application
+# ---------------------------------------------------------------------------
 
 application = get_wsgi_application()
