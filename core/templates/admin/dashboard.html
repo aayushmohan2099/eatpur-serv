@@ -1,0 +1,28 @@
+{% extends "admin/base_site.html" %}
+
+{% block main_content %}
+
+<h1>Dashboard</h1>
+
+<div class="cards">
+
+    <div class="card">
+        <h4>Total Revenue</h4>
+        <h2>₹{{ total_revenue }}</h2>
+    </div>
+
+    <div class="card">
+        <h4>Orders Today</h4>
+        <h2>{{ total_orders }}</h2>
+    </div>
+
+    <div class="card">
+        <h4>Active Users</h4>
+        <h2>{{ total_users }}</h2>
+    </div>
+
+</div>
+
+<canvas id="revenueChart"></canvas>
+
+{% endblock %}

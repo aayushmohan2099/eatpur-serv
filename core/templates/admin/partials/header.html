@@ -1,0 +1,17 @@
+<header class="header">
+
+    <div class="left">
+        <button id="toggleSidebar">☰</button>
+        <h2>{{ USER_ROLE }} PANEL</h2>
+    </div>
+
+    <div class="center">
+        <input type="text" placeholder="Search users, orders, products..." />
+    </div>
+
+    <div class="right">
+        <span>{{ request.user.username }}</span>
+        <img src="https://ui-avatars.com/api/?name={{ request.user.username }}" />
+    </div>
+
+</header>

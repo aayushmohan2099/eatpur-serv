@@ -111,6 +111,10 @@ EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "no-reply@example.com")
 
+TEMPLATES[0]["OPTIONS"]["context_processors"] += [
+    "core.admin_panel.context_processors.user_role",
+]
+
 # ---------------------------------------------------------------------------
 # Logging — file-backed in production
 # ---------------------------------------------------------------------------

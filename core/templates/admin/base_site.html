@@ -1,0 +1,40 @@
+{% extends "admin/base.html" %}
+{% load static %}
+
+{% block title %}Millet Admin{% endblock %}
+
+{% block extrastyle %}
+<link rel="stylesheet" href="{% static 'admin_custom/css/dashboard.css' %}">
+{% endblock %}
+
+{% block extrahead %}
+<script src="{% static 'admin_custom/js/dashboard.js' %}"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% endblock %}
+
+{% block content %}
+
+<div class="app-container">
+
+    <!-- HEADER -->
+    {% include "admin/partials/header.html" %}
+
+    <div class="app-body">
+
+        <!-- SIDEBAR -->
+        {% include "admin/partials/sidebar.html" %}
+
+        <!-- MAIN CONTENT -->
+        <main class="main-content">
+            {% block main_content %}
+            {% endblock %}
+        </main>
+
+    </div>
+
+    <!-- FOOTER -->
+    {% include "admin/partials/footer.html" %}
+
+</div>
+
+{% endblock %}

@@ -74,6 +74,10 @@ SECURE_CONTENT_TYPE_NOSNIFF = False
 CAPTCHA_EXPIRE_MINUTES = 10   # more relaxed in dev
 CAPTCHA_CASE_SENSITIVE = False
 
+TEMPLATES[0]["OPTIONS"]["context_processors"] += [
+    "core.admin_panel.context_processors.user_role",
+]
+
 # ---------------------------------------------------------------------------
 # Logging — verbose in dev
 # ---------------------------------------------------------------------------

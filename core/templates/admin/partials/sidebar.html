@@ -1,0 +1,37 @@
+<aside class="sidebar" id="sidebar">
+
+    <div class="logo">🌿 Millet Admin</div>
+
+    <ul>
+
+        <!-- ADMIN -->
+        {% if USER_ROLE == "ADMIN" %}
+            <li><a href="{% url 'admin:dashboard' %}">Dashboard</a></li>
+            <li><a href="/admin/users/">Users</a></li>
+            <li><a href="/admin/orders/">Orders</a></li>
+            <li><a href="/admin/inventory/">Inventory</a></li>
+            <li><a href="/admin/messaging/">Messaging</a></li>
+            <li><a href="/admin/blog/">Blog</a></li>
+        {% endif %}
+
+        <!-- DEV -->
+        {% if USER_ROLE == "DEV" %}
+            <li><a href="#">System Logs</a></li>
+            <li><a href="#">API Monitor</a></li>
+        {% endif %}
+
+        <!-- STAFF -->
+        {% if USER_ROLE == "STAFF" %}
+            <li><a href="#">Orders</a></li>
+            <li><a href="#">Customer Queries</a></li>
+        {% endif %}
+
+        <!-- INVENTORY -->
+        {% if USER_ROLE == "INVENTORY_MANAGER" %}
+            <li><a href="#">Inventory</a></li>
+            <li><a href="#">Stock Alerts</a></li>
+        {% endif %}
+
+    </ul>
+
+</aside>
