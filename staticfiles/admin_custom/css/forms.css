@@ -1,0 +1,72 @@
+/* ============================================================
+   MILLET ADMIN — forms.css
+   ============================================================ */
+
+.form-group { margin-bottom: 18px; }
+
+.form-label {
+  display: block; font-size: 12px; font-weight: 600;
+  color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px;
+  margin-bottom: 6px;
+}
+.form-label .required { color: var(--danger); margin-left: 2px; }
+
+.form-control {
+  width: 100%; padding: 9px 12px;
+  border: 1px solid var(--border); border-radius: var(--radius-xs);
+  font-family: var(--font); font-size: 13px; color: var(--text);
+  background: var(--surface); outline: none; transition: var(--transition);
+  appearance: none;
+}
+.form-control:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.form-control:invalid.touched { border-color: var(--danger); box-shadow: 0 0 0 3px var(--danger-soft); }
+.form-control::placeholder { color: var(--text-light); }
+
+textarea.form-control { resize: vertical; min-height: 90px; }
+
+select.form-control {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center; padding-right: 30px;
+}
+
+.form-hint { font-size: 11px; color: var(--text-light); margin-top: 4px; }
+.form-error { font-size: 11px; color: var(--danger); margin-top: 4px; display: none; }
+.form-control:invalid.touched ~ .form-error { display: block; }
+
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+
+.char-counter { font-size: 11px; color: var(--text-light); text-align: right; margin-top: 4px; }
+.char-counter.warn { color: var(--warn); }
+.char-counter.over { color: var(--danger); }
+
+/* Stepper for multi-step forms */
+.form-stepper {
+  display: flex; gap: 0; margin-bottom: 28px; border-radius: var(--radius-sm); overflow: hidden;
+  border: 1px solid var(--border);
+}
+.form-step {
+  flex: 1; padding: 10px 12px; font-size: 12px; font-weight: 600;
+  text-align: center; color: var(--text-light); background: var(--surface);
+  border-right: 1px solid var(--border); transition: var(--transition);
+}
+.form-step:last-child { border-right: none; }
+.form-step.active { background: var(--accent-soft); color: var(--accent-dim); }
+.form-step.done { background: rgba(34,197,94,.06); color: var(--accent); }
+
+/* Toggle switch */
+.toggle-wrap { display: flex; align-items: center; gap: 10px; }
+.toggle { position: relative; width: 42px; height: 24px; flex-shrink: 0; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle-slider {
+  position: absolute; inset: 0; background: var(--border);
+  border-radius: 12px; cursor: pointer; transition: var(--transition);
+}
+.toggle-slider::before {
+  content: ''; position: absolute; width: 18px; height: 18px;
+  left: 3px; top: 3px; background: white; border-radius: 50%; transition: var(--transition);
+  box-shadow: 0 1px 3px rgba(0,0,0,.2);
+}
+.toggle input:checked ~ .toggle-slider { background: var(--accent); }
+.toggle input:checked ~ .toggle-slider::before { transform: translateX(18px); }
+.toggle-label { font-size: 13px; font-weight: 500; color: var(--text); }

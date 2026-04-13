@@ -1,0 +1,46 @@
+/* ============================================================
+   MILLET ADMIN — modals.css
+   ============================================================ */
+
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(15,23,42,.5);
+  backdrop-filter: blur(3px); z-index: 900;
+  opacity: 0; pointer-events: none; transition: opacity .2s;
+}
+.modal-overlay.open { opacity: 1; pointer-events: all; }
+
+.modal-container {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -48%);
+  z-index: 901; width: 560px; max-width: calc(100vw - 32px);
+  opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s;
+}
+.modal-container.open { opacity: 1; pointer-events: all; transform: translate(-50%, -50%); }
+
+.modal {
+  background: var(--surface); border-radius: var(--radius);
+  box-shadow: 0 20px 40px rgba(0,0,0,.18); overflow: hidden;
+  max-height: calc(100vh - 64px); display: flex; flex-direction: column;
+}
+
+.modal-header {
+  padding: 18px 24px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+}
+.modal-title { font-size: 16px; font-weight: 700; color: var(--text); }
+.modal-close {
+  width: 30px; height: 30px; border: none; background: var(--bg);
+  border-radius: var(--radius-xs); cursor: pointer; display: flex; align-items: center; justify-content: center;
+  color: var(--text-muted); font-size: 18px; line-height: 1; transition: var(--transition);
+}
+.modal-close:hover { background: var(--danger-soft); color: var(--danger); }
+
+.modal-body { padding: 24px; overflow-y: auto; flex: 1; }
+
+.modal-footer {
+  padding: 16px 24px; border-top: 1px solid var(--border);
+  display: flex; justify-content: flex-end; gap: 10px; flex-shrink: 0;
+}
+
+/* Wide modal */
+.modal-container.wide { width: 760px; }
+.modal-container.narrow { width: 420px; }

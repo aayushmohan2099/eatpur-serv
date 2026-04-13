@@ -1,37 +1,118 @@
 <aside class="sidebar" id="sidebar">
+  {% load admin_tags %}
+  <nav class="sidebar-nav">
 
-    <div class="logo">🌿 Millet Admin</div>
+    {% if USER_ROLE == "STAFF" %}
+    <div class="nav-section">
+      <span class="nav-label">OVERVIEW</span>
+      <a href="{% url 'custom_admin:staff_dashboard' %}" class="nav-item {% if request.resolver_match.url_name == 'staff_dashboard' %}active{% endif %}" data-href="{% url 'custom_admin:staff_dashboard' %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <span>Dashboard</span>
+      </a>
+    </div>
+    <div class="nav-section">
+      <span class="nav-label">COMMUNICATION</span>
+      <a href="{% url 'custom_admin:staff_messages' %}" class="nav-item {% if request.resolver_match.url_name == 'staff_messages' %}active{% endif %}" data-href="{% url 'custom_admin:staff_messages' %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+        <span>Staff Messages</span>
+      </a>
+      <a href="{% url 'custom_admin:staff_user_messages' %}" class="nav-item {% if request.resolver_match.url_name == 'staff_user_messages' %}active{% endif %}" data-href="{% url 'custom_admin:staff_user_messages' %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+        <span>Customer Messages</span>
+      </a>
+    </div>
+    <div class="nav-section">
+      <span class="nav-label">COMMERCE</span>
+      <a href="{% url 'custom_admin:staff_coupons' %}" class="nav-item {% if request.resolver_match.url_name == 'staff_coupons' %}active{% endif %}" data-href="{% url 'custom_admin:staff_coupons' %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><circle cx="7" cy="7" r="1.5" fill="currentColor"/></svg>
+        <span>Coupons</span>
+      </a>
+      <a href="{% url 'custom_admin:staff_orders' %}" class="nav-item {% if request.resolver_match.url_name == 'staff_orders' %}active{% endif %}" data-href="{% url 'custom_admin:staff_orders' %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+        <span>Orders</span>
+      </a>
+    </div>
+    {% endif %}
 
-    <ul>
+    {% if USER_ROLE == "INVENTORY_MANAGER" %}
+    <div class="nav-section">
+      <span class="nav-label">OVERVIEW</span>
+      <a href="{% url 'custom_admin:inventory_dashboard' %}" class="nav-item" data-href="{% url 'custom_admin:inventory_dashboard' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Dashboard</span></a>
+    </div>
+    <div class="nav-section">
+      <span class="nav-label">INVENTORY</span>
+      <a href="{% url 'custom_admin:inventory_categories' %}" class="nav-item" data-href="{% url 'custom_admin:inventory_categories' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6h16M4 12h16M4 18h7"/></svg><span>Product Categories</span></a>
+      <a href="{% url 'custom_admin:inventory_products' %}" class="nav-item" data-href="{% url 'custom_admin:inventory_products' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/></svg><span>Product Management</span></a>
+      <a href="{% url 'custom_admin:inventory_status' %}" class="nav-item" data-href="{% url 'custom_admin:inventory_status' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg><span>Product Status</span></a>
+    </div>
+    <div class="nav-section">
+      <span class="nav-label">CONTENT</span>
+      <a href="{% url 'custom_admin:inventory_blog' %}" class="nav-item" data-href="{% url 'custom_admin:inventory_blog' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg><span>Blog Management</span></a>
+      <a href="{% url 'custom_admin:inventory_messages' %}" class="nav-item" data-href="{% url 'custom_admin:inventory_messages' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg><span>Staff Messages</span></a>
+    </div>
+    {% endif %}
 
-        <!-- ADMIN -->
-        {% if USER_ROLE == "ADMIN" %}
-            <li><a href="{% url 'admin:dashboard' %}">Dashboard</a></li>
-            <li><a href="/admin/users/">Users</a></li>
-            <li><a href="/admin/orders/">Orders</a></li>
-            <li><a href="/admin/inventory/">Inventory</a></li>
-            <li><a href="/admin/messaging/">Messaging</a></li>
-            <li><a href="/admin/blog/">Blog</a></li>
-        {% endif %}
+    {% if USER_ROLE == "SUPERVISOR" %}
+    <div class="nav-section">
+      <span class="nav-label">OVERVIEW</span>
+      <a href="{% url 'custom_admin:supervisor_dashboard' %}" class="nav-item" data-href="{% url 'custom_admin:supervisor_dashboard' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Dashboard</span></a>
+    </div>
+    <div class="nav-section">
+      <span class="nav-label">APPROVALS</span>
+      <a href="{% url 'custom_admin:supervisor_approval' %}" class="nav-item" data-href="{% url 'custom_admin:supervisor_approval' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg><span>Product Approval</span></a>
+    </div>
+    <div class="nav-section">
+      <span class="nav-label">INVENTORY</span>
+      <a href="{% url 'custom_admin:supervisor_categories' %}" class="nav-item" data-href="{% url 'custom_admin:supervisor_categories' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6h16M4 12h16M4 18h7"/></svg><span>Product Categories</span></a>
+      <a href="{% url 'custom_admin:supervisor_products' %}" class="nav-item" data-href="{% url 'custom_admin:supervisor_products' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/></svg><span>Product Management</span></a>
+      <a href="{% url 'custom_admin:supervisor_status' %}" class="nav-item" data-href="{% url 'custom_admin:supervisor_status' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg><span>Product Status</span></a>
+    </div>
+    <div class="nav-section">
+      <span class="nav-label">COMMERCE</span>
+      <a href="{% url 'custom_admin:supervisor_coupons' %}" class="nav-item" data-href="{% url 'custom_admin:supervisor_coupons' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><circle cx="7" cy="7" r="1.5" fill="currentColor"/></svg><span>Coupons</span></a>
+      <a href="{% url 'custom_admin:supervisor_orders' %}" class="nav-item" data-href="{% url 'custom_admin:supervisor_orders' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/></svg><span>Orders</span></a>
+    </div>
+    <div class="nav-section">
+      <span class="nav-label">CONTENT</span>
+      <a href="{% url 'custom_admin:supervisor_blog' %}" class="nav-item" data-href="{% url 'custom_admin:supervisor_blog' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg><span>Blog Management</span></a>
+      <a href="{% url 'custom_admin:supervisor_messages' %}" class="nav-item" data-href="{% url 'custom_admin:supervisor_messages' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg><span>Staff Messages</span></a>
+    </div>
+    {% endif %}
 
-        <!-- DEV -->
-        {% if USER_ROLE == "DEV" %}
-            <li><a href="#">System Logs</a></li>
-            <li><a href="#">API Monitor</a></li>
-        {% endif %}
+    {% if USER_ROLE == "ADMIN" %}
+    <div class="nav-section">
+      <span class="nav-label">OVERVIEW</span>
+      <a href="{% url 'custom_admin:admin_dashboard' %}" class="nav-item" data-href="{% url 'custom_admin:admin_dashboard' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Dashboard</span></a>
+    </div>
+    <div class="nav-section">
+      <span class="nav-label">USER MANAGEMENT</span>
+      <a href="{% url 'custom_admin:admin_users' %}" class="nav-item" data-href="{% url 'custom_admin:admin_users' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg><span>Users</span></a>
+    </div>
+    <div class="nav-section">
+      <span class="nav-label">ORDERS & PAYMENTS</span>
+      <a href="{% url 'custom_admin:admin_orders' %}" class="nav-item" data-href="{% url 'custom_admin:admin_orders' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/></svg><span>Orders</span></a>
+      <a href="{% url 'custom_admin:admin_coupons' %}" class="nav-item" data-href="{% url 'custom_admin:admin_coupons' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><circle cx="7" cy="7" r="1.5" fill="currentColor"/></svg><span>Coupons</span></a>
+    </div>
+    <div class="nav-section">
+      <span class="nav-label">INVENTORY</span>
+      <a href="{% url 'custom_admin:admin_approval' %}" class="nav-item" data-href="{% url 'custom_admin:admin_approval' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 11l3 3L22 4"/></svg><span>Product Approval</span></a>
+      <a href="{% url 'custom_admin:admin_categories' %}" class="nav-item" data-href="{% url 'custom_admin:admin_categories' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6h16M4 12h16M4 18h7"/></svg><span>Categories</span></a>
+      <a href="{% url 'custom_admin:admin_products' %}" class="nav-item" data-href="{% url 'custom_admin:admin_products' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/></svg><span>Products</span></a>
+      <a href="{% url 'custom_admin:admin_product_status' %}" class="nav-item" data-href="{% url 'custom_admin:admin_product_status' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/></svg><span>Product Status</span></a>
+    </div>
+    <div class="nav-section">
+      <span class="nav-label">CONTENT & COMMS</span>
+      <a href="{% url 'custom_admin:admin_blog' %}" class="nav-item" data-href="{% url 'custom_admin:admin_blog' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg><span>Blog Management</span></a>
+      <a href="{% url 'custom_admin:admin_messages' %}" class="nav-item" data-href="{% url 'custom_admin:admin_messages' %}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg><span>Messages</span></a>
+    </div>
+    {% endif %}
 
-        <!-- STAFF -->
-        {% if USER_ROLE == "STAFF" %}
-            <li><a href="#">Orders</a></li>
-            <li><a href="#">Customer Queries</a></li>
-        {% endif %}
+  </nav>
 
-        <!-- INVENTORY -->
-        {% if USER_ROLE == "INVENTORY_MANAGER" %}
-            <li><a href="#">Inventory</a></li>
-            <li><a href="#">Stock Alerts</a></li>
-        {% endif %}
-
-    </ul>
-
+  <div class="sidebar-footer">
+      <a href="{% url 'custom_admin:logout' %}" class="logout-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        <span>Logout</span>
+      </a>
+    </div>
 </aside>

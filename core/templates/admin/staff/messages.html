@@ -1,0 +1,178 @@
+{% extends is_ajax|yesno:"admin/ajax_base.html,admin/base_site.html" %}
+
+{% block main_content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Staff Messages</h1>
+    <p class="page-subtitle">Internal communication between staff members.</p>
+  </div>
+  <button class="btn btn-primary" onclick="openComposeModal()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    New Message
+  </button>
+</div>
+
+<div class="messages-layout">
+
+  <!-- Conversation list -->
+  <div class="convo-list" id="convoList">
+    <div class="convo-list-header">
+      <h3>Conversations</h3>
+      <span style="font-size:12px;color:var(--text-muted);">{{ conversations|length }} threads</span>
+    </div>
+
+    {% for convo in conversations %}
+    <a class="convo-item {% if forloop.first %}active{% endif %}"
+       data-user-id="{{ convo.other_user.id }}"
+       onclick="loadThread({{ convo.other_user.id }}, '{{ convo.other_user.username }}'); return false;"
+       href="#">
+      <img class="convo-item-avatar"
+           src="https://ui-avatars.com/api/?name={{ convo.other_user.username }}&background=22c55e&color=fff&size=38"
+           alt="{{ convo.other_user.username }}">
+      <div class="convo-item-body">
+        <div class="convo-item-name">{{ convo.other_user.username }}</div>
+        <div class="convo-item-preview">{{ convo.latest_preview }}</div>
+      </div>
+      <div class="convo-item-meta">
+        {{ convo.latest_time|timesince }} ago
+        {% if convo.unread %}<div class="unread-dot"></div>{% endif %}
+      </div>
+    </a>
+    {% empty %}
+    <div class="empty-state">
+      <div class="empty-state-icon">💬</div>
+      <h3>No conversations yet</h3>
+      <p>Start a new message above.</p>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Message thread -->
+  <div class="message-thread" id="messageThread">
+    {% if conversations %}
+      <div class="thread-empty" id="threadEmpty" style="display:none;">Select a conversation</div>
+      <div class="thread-header" id="threadHeader">
+        <img id="threadAvatar" src="" alt="">
+        <div class="thread-header-info">
+          <h4 id="threadName">{{ conversations.0.other_user.username }}</h4>
+          <span>Staff Member</span>
+        </div>
+      </div>
+      <div class="thread-body" id="threadBody">
+        <div class="loading-spinner"></div>
+      </div>
+      <div class="thread-composer" id="threadComposer">
+        <textarea id="msgInput" placeholder="Type a message…" rows="1"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage();}"></textarea>
+        <button class="btn btn-primary" onclick="sendMessage()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          Send
+        </button>
+      </div>
+    {% else %}
+      <div class="thread-empty">No conversations. Start one using "New Message".</div>
+    {% endif %}
+  </div>
+
+</div>
+
+<!-- Compose Modal populated by JS -->
+
+<script>
+let activeUserId = {% if conversations %}{{ conversations.0.other_user.id }}{% else %}null{% endif %};
+const sendUrl    = "{% url 'custom_admin:staff_send_message' %}";
+const threadUrl  = "{% url 'custom_admin:staff_thread' %}";
+const staffUsers = {{ staff_users_json|safe }};
+
+{% if conversations %}
+document.addEventListener('DOMContentLoaded', () => {
+  loadThread(activeUserId, '{{ conversations.0.other_user.username }}');
+});
+{% endif %}
+
+async function loadThread(userId, username) {
+  activeUserId = userId;
+  // Update active state
+  document.querySelectorAll('.convo-item').forEach(el => el.classList.remove('active'));
+  const el = document.querySelector(`[data-user-id="${userId}"]`);
+  if (el) el.classList.add('active');
+
+  const avatar = document.getElementById('threadAvatar');
+  const name   = document.getElementById('threadName');
+  if (avatar) avatar.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=22c55e&color=fff&size=34`;
+  if (name)   name.textContent = username;
+
+  const body = document.getElementById('threadBody');
+  if (!body) return;
+  body.innerHTML = '<div class="loading-spinner"></div>';
+
+  const data = await apiGet(`${threadUrl}?user_id=${userId}`);
+  if (!data.messages) { body.innerHTML = '<div class="empty-state"><p>Failed to load.</p></div>'; return; }
+
+  body.innerHTML = data.messages.map(m => `
+    <div class="msg-bubble-wrap ${m.is_mine ? 'mine' : ''}">
+      <img class="msg-bubble-avatar"
+           src="https://ui-avatars.com/api/?name=${encodeURIComponent(m.sender)}&background=${m.is_mine ? '22c55e' : 'e2e8f0'}&color=${m.is_mine ? 'fff' : '0f172a'}&size=28"
+           alt="${m.sender}">
+      <div>
+        <div class="msg-bubble ${m.is_mine ? 'mine' : 'theirs'}">${m.text}</div>
+        <div class="msg-meta">${m.time}</div>
+      </div>
+    </div>`).join('');
+  body.scrollTop = body.scrollHeight;
+}
+
+async function sendMessage() {
+  const input = document.getElementById('msgInput');
+  const text  = input.value.trim();
+  if (!text || !activeUserId) return;
+  input.value = '';
+  input.style.height = 'auto';
+  const result = await apiPost(sendUrl, { receiver_id: activeUserId, text });
+  if (result.success) {
+    loadThread(activeUserId, document.getElementById('threadName').textContent);
+  } else {
+    toast(result.error || 'Failed to send.', 'error');
+  }
+}
+
+function openComposeModal() {
+  const opts = staffUsers.map(u => `<option value="${u.id}">${u.username}</option>`).join('');
+  openModal(
+    'New Message',
+    `<div class="form-group">
+       <label class="form-label">To <span class="required">*</span></label>
+       <select class="form-control" id="composeReceiver">${opts}</select>
+     </div>
+     <div class="form-group">
+       <label class="form-label">Message <span class="required">*</span></label>
+       <textarea class="form-control" id="composeText" rows="4" placeholder="Write your message…"></textarea>
+     </div>`,
+    `<button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+     <button class="btn btn-primary" onclick="sendComposed()">Send Message</button>`
+  );
+}
+
+async function sendComposed() {
+  const receiver_id = document.getElementById('composeReceiver').value;
+  const text = document.getElementById('composeText').value.trim();
+  if (!text) { toast('Message cannot be empty.', 'warn'); return; }
+  const result = await apiPost(sendUrl, { receiver_id, text });
+  if (result.success) {
+    closeModal();
+    toast('Message sent.');
+    location.reload();
+  } else {
+    toast(result.error || 'Failed to send.', 'error');
+  }
+}
+
+// Auto-resize textarea
+document.addEventListener('input', e => {
+  if (e.target.id === 'msgInput') {
+    e.target.style.height = 'auto';
+    e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+  }
+});
+</script>
+{% endblock %}

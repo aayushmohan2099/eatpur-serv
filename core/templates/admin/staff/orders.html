@@ -1,0 +1,181 @@
+{% extends is_ajax|yesno:"admin/ajax_base.html,admin/base_site.html" %}
+
+{% block main_content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Orders</h1>
+    <p class="page-subtitle">All customer orders and their payment status.</p>
+  </div>
+  <div class="page-actions">
+    <div style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--text-muted);">
+      <span>View only — contact Supervisor to modify</span>
+    </div>
+  </div>
+</div>
+
+<div class="payment-hold-banner">
+  ⚠️ Payment processing is currently disabled. Transaction records are view-only.
+</div>
+
+<!-- Filter bar -->
+<div class="filter-bar">
+  <input type="date" id="filterFrom" placeholder="From date" onchange="applyFilters()">
+  <input type="date" id="filterTo"   placeholder="To date"   onchange="applyFilters()">
+  <select id="filterStatus" onchange="applyFilters()">
+    <option value="">All Statuses</option>
+    {% for status in transaction_statuses %}
+    <option value="{{ status.status_name }}">{{ status.status_name }}</option>
+    {% endfor %}
+  </select>
+  <button class="btn btn-secondary btn-sm" onclick="clearFilters()">Clear</button>
+</div>
+
+<div class="section-card">
+  <div class="section-card-header">
+    <span class="section-card-title">All Orders</span>
+    <div class="table-search">
+      <svg class="table-search-icon" viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M13.5 13.5L17 17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      <input type="text" placeholder="Search orders…" data-table-search="orders">
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table data-table="orders" data-per-page="20">
+      <thead>
+        <tr>
+          <th data-col="0">Order ID <span class="sort-arrow"></span></th>
+          <th data-col="1">Customer <span class="sort-arrow"></span></th>
+          <th data-col="2">Date <span class="sort-arrow"></span></th>
+          <th data-col="3">Total <span class="sort-arrow"></span></th>
+          <th data-col="4">Items</th>
+          <th data-col="5">Payment Status <span class="sort-arrow"></span></th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="ordersTableBody">
+        {% for order in orders %}
+        <tr data-status="{{ order.latest_tx_status }}" data-date="{{ order.order_date|date:'Y-m-d' }}">
+          <td class="td-mono">#{{ order.id }}</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <img src="https://ui-avatars.com/api/?name={{ order.session.user.username|default:'U' }}&size=26&background=e2e8f0&color=0f172a"
+                   style="width:26px;height:26px;border-radius:50%;" alt="">
+              <span>{{ order.session.user.username|default:"—" }}</span>
+            </div>
+          </td>
+          <td class="td-muted">{{ order.order_date|date:"d M Y, H:i" }}</td>
+          <td style="font-weight:600;">₹{{ order.total_amount }}</td>
+          <td class="td-muted">{{ order.order_products.count }} item{{ order.order_products.count|pluralize }}</td>
+          <td>
+            {% with s=order.latest_tx_status %}
+              {% if s == "SUCCESS" %}<span class="badge badge-green">{{ s }}</span>
+              {% elif s == "FAILED" or s == "CANCELLED" %}<span class="badge badge-red">{{ s }}</span>
+              {% elif s == "PENDING" or s == "INITIATED" %}<span class="badge badge-yellow">{{ s }}</span>
+              {% elif s == "REFUNDED" %}<span class="badge badge-blue">{{ s }}</span>
+              {% else %}<span class="badge badge-grey">{{ s|default:"—" }}</span>{% endif %}
+            {% endwith %}
+          </td>
+          <td>
+            <button class="btn btn-sm btn-secondary" onclick="viewOrderDetail({{ order.id }})">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              View
+            </button>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="7">
+            <div class="empty-state">
+              <div class="empty-state-icon">📦</div>
+              <h3>No orders found</h3>
+              <p>Orders will appear here once customers place them.</p>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div data-table-pagination="orders" class="pagination"></div>
+</div>
+
+<script>
+const orderDetailUrl = "{% url 'custom_admin:api_order_detail' pk=0 %}".replace('/0/', '/');
+
+async function viewOrderDetail(orderId) {
+  const data = await apiGet(`${orderDetailUrl}${orderId}/`);
+  if (!data.order) { toast('Failed to load order.', 'error'); return; }
+  const o = data.order;
+
+  const productsHTML = o.products.map(p => `
+    <tr>
+      <td style="padding:8px 12px;">${p.product_name}</td>
+      <td style="padding:8px 12px;text-align:center;">${p.quantity}</td>
+      <td style="padding:8px 12px;">₹${p.price_at_purchase}</td>
+      <td style="padding:8px 12px;font-weight:600;">₹${p.subtotal}</td>
+    </tr>`).join('');
+
+  const txHTML = o.transactions.map(tx => `
+    <div style="padding:10px;background:var(--bg);border-radius:var(--radius-xs);margin-top:8px;font-size:12px;">
+      <div style="display:flex;justify-content:space-between;">
+        <span class="td-mono">${tx.transaction_id}</span>
+        <span class="badge ${tx.status==='SUCCESS'?'badge-green':tx.status==='FAILED'?'badge-red':'badge-yellow'}">${tx.status}</span>
+      </div>
+      <div style="color:var(--text-muted);margin-top:4px;">${tx.processor} · ${tx.date}</div>
+    </div>`).join('') || '<p style="color:var(--text-muted);font-size:13px;">No transactions recorded.</p>';
+
+  openModal(
+    `Order #${orderId} Details`,
+    `<div style="margin-bottom:16px;">
+       <div style="display:flex;gap:20px;font-size:13px;margin-bottom:12px;">
+         <div><span style="color:var(--text-muted);">Customer:</span> <strong>${o.customer}</strong></div>
+         <div><span style="color:var(--text-muted);">Date:</span> ${o.order_date}</div>
+         <div><span style="color:var(--text-muted);">Coupon:</span> ${o.coupon || '—'}</div>
+       </div>
+     </div>
+     <div class="section-card-title" style="margin-bottom:8px;">Order Items</div>
+     <div style="border:1px solid var(--border);border-radius:var(--radius-xs);overflow:hidden;margin-bottom:16px;">
+       <table style="width:100%;font-size:13px;">
+         <thead><tr style="background:var(--bg);">
+           <th style="padding:8px 12px;text-align:left;font-size:11px;color:var(--text-muted);">Product</th>
+           <th style="padding:8px 12px;text-align:center;font-size:11px;color:var(--text-muted);">Qty</th>
+           <th style="padding:8px 12px;font-size:11px;color:var(--text-muted);">Unit Price</th>
+           <th style="padding:8px 12px;font-size:11px;color:var(--text-muted);">Subtotal</th>
+         </tr></thead>
+         <tbody>${productsHTML}</tbody>
+         <tfoot><tr style="border-top:2px solid var(--border);">
+           <td colspan="3" style="padding:8px 12px;text-align:right;font-weight:600;font-size:13px;">Total</td>
+           <td style="padding:8px 12px;font-weight:700;color:var(--accent);">₹${o.total_amount}</td>
+         </tr></tfoot>
+       </table>
+     </div>
+     <div class="section-card-title" style="margin-bottom:8px;">Transaction History</div>
+     ${txHTML}`,
+    `<button class="btn btn-secondary" onclick="closeModal()">Close</button>`,
+    { size: 'wide' }
+  );
+}
+
+function applyFilters() {
+  const from   = document.getElementById('filterFrom').value;
+  const to     = document.getElementById('filterTo').value;
+  const status = document.getElementById('filterStatus').value.toLowerCase();
+  document.querySelectorAll('#ordersTableBody tr').forEach(row => {
+    const rowDate   = row.dataset.date || '';
+    const rowStatus = (row.dataset.status || '').toLowerCase();
+    let show = true;
+    if (from && rowDate < from) show = false;
+    if (to   && rowDate > to)   show = false;
+    if (status && !rowStatus.includes(status)) show = false;
+    row.style.display = show ? '' : 'none';
+  });
+}
+
+function clearFilters() {
+  document.getElementById('filterFrom').value   = '';
+  document.getElementById('filterTo').value     = '';
+  document.getElementById('filterStatus').value = '';
+  document.querySelectorAll('#ordersTableBody tr').forEach(r => r.style.display = '');
+}
+</script>
+{% endblock %}

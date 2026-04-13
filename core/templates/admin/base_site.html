@@ -1,40 +1,46 @@
-{% extends "admin/base.html" %}
-{% load static %}
-
-{% block title %}Millet Admin{% endblock %}
-
-{% block extrastyle %}
-<link rel="stylesheet" href="{% static 'admin_custom/css/dashboard.css' %}">
-{% endblock %}
-
-{% block extrahead %}
-<script src="{% static 'admin_custom/js/dashboard.js' %}"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-{% endblock %}
-
-{% block content %}
-
-<div class="app-container">
-
-    <!-- HEADER -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}EatPur Admin{% endblock %}</title>
+  
+  {% load static %}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="{% static 'admin_custom/css/dashboard.css' %}">
+  <link rel="stylesheet" href="{% static 'admin_custom/css/tables.css' %}">
+  <link rel="stylesheet" href="{% static 'admin_custom/css/modals.css' %}">
+  <link rel="stylesheet" href="{% static 'admin_custom/css/forms.css' %}">
+  
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
+  {% block extrahead %}{% endblock %}
+</head>
+<body>
+  <div class="app-container">
     {% include "admin/partials/header.html" %}
-
+    
     <div class="app-body">
-
-        <!-- SIDEBAR -->
-        {% include "admin/partials/sidebar.html" %}
-
-        <!-- MAIN CONTENT -->
-        <main class="main-content">
-            {% block main_content %}
-            {% endblock %}
-        </main>
-
+      {% include "admin/partials/sidebar.html" %}
+      
+      <main class="main-content" id="mainContent">
+        {% block main_content %}{% endblock %}
+      </main>
     </div>
-
-    <!-- FOOTER -->
+    
     {% include "admin/partials/footer.html" %}
+  </div>
 
-</div>
+  <div id="modalOverlay" class="modal-overlay" onclick="closeModal()"></div>
+  <div id="modalContainer" class="modal-container"></div>
 
-{% endblock %}
+  <script src="{% static 'admin_custom/js/dashboard.js' %}"></script>
+  <script src="{% static 'admin_custom/js/api.js' %}"></script>
+  <script src="{% static 'admin_custom/js/modals.js' %}"></script>
+  <script src="{% static 'admin_custom/js/tables.js' %}"></script>
+  
+  {% block extrajs %}{% endblock %}
+</body>
+</html>

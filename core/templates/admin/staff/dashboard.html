@@ -1,0 +1,125 @@
+{% extends is_ajax|yesno:"admin/ajax_base.html,admin/base_site.html" %}
+{% load static %}
+
+{% block main_content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Good {{ greeting }}, {{ request.user.username }} 👋</h1>
+    <p class="page-subtitle">Here's what's happening in your store today.</p>
+  </div>
+  <div class="page-actions">
+    <span style="font-size:12px;color:var(--text-muted);">{{ today }}</span>
+  </div>
+</div>
+
+<div class="cards-grid">
+  <div class="stat-card">
+    <div class="stat-card-icon blue">📦</div>
+    <div class="stat-card-label">Orders Today</div>
+    <div class="stat-card-value">{{ total_orders_today }}</div>
+    <div class="stat-card-change">All time: {{ total_orders_all }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-icon warn">⏳</div>
+    <div class="stat-card-label">Pending Orders</div>
+    <div class="stat-card-value">{{ pending_orders }}</div>
+    <div class="stat-card-change">Require attention</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-icon green">💬</div>
+    <div class="stat-card-label">Open Cust. Messages</div>
+    <div class="stat-card-value">{{ open_customer_messages }}</div>
+    <div class="stat-card-change">Awaiting reply</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-icon red">🏷️</div>
+    <div class="stat-card-label">Active Coupons</div>
+    <div class="stat-card-value">{{ active_coupons }}</div>
+    <div class="stat-card-change">Currently ONGOING</div>
+  </div>
+</div>
+
+<div class="chart-card">
+  <div class="chart-card-header">
+    <div>
+      <div class="chart-card-title">Orders — Last 14 Days</div>
+      <div class="chart-card-sub">Daily order volume</div>
+    </div>
+  </div>
+  <div class="chart-wrap">
+    <canvas id="ordersChart"></canvas>
+  </div>
+</div>
+
+<div class="section-card">
+  <div class="section-card-header">
+    <span class="section-card-title">Recent Orders</span>
+    <a href="{% url 'custom_admin:staff_orders' %}" class="btn btn-secondary btn-sm" data-href="{% url 'custom_admin:staff_orders' %}">View All</a>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Order ID</th>
+          <th>Customer</th>
+          <th>Date</th>
+          <th>Amount</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for order in recent_orders %}
+        <tr>
+          <td class="td-mono">#{{ order.id }}</td>
+          <td>{{ order.session.user.username|default:"—" }}</td>
+          <td class="td-muted">{{ order.order_date|date:"d M, H:i" }}</td>
+          <td>₹{{ order.total_amount }}</td>
+          <td>
+            {% with status=order.transactions.last.status.status_name %}
+              {% if status == "SUCCESS" %}<span class="badge badge-green">{{ status }}</span>
+              {% elif status == "FAILED" or status == "CANCELLED" %}<span class="badge badge-red">{{ status }}</span>
+              {% elif status == "PENDING" or status == "INITIATED" %}<span class="badge badge-yellow">{{ status }}</span>
+              {% else %}<span class="badge badge-grey">{{ status|default:"—" }}</span>{% endif %}
+            {% endwith %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5"><div class="empty-state"><div class="empty-state-icon">📦</div><h3>No orders yet</h3></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+(function() {
+  const labels = {{ chart_labels|safe }};
+  const data   = {{ chart_data|safe }};
+  const ctx = document.getElementById('ordersChart');
+  if (!ctx) return;
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Orders',
+        data,
+        backgroundColor: 'rgba(34,197,94,.2)',
+        borderColor: '#22c55e',
+        borderWidth: 2,
+        borderRadius: 6,
+        hoverBackgroundColor: 'rgba(34,197,94,.35)',
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { mode: 'index' } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+        y: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 11 }, precision: 0 }, beginAtZero: true }
+      }
+    }
+  });
+})();
+</script>
+{% endblock %}

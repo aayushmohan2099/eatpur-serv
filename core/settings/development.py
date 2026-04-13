@@ -67,6 +67,7 @@ SESSION_COOKIE_SECURE = False
 CSRF_COOKIE_SECURE = False
 SECURE_BROWSER_XSS_FILTER = False
 SECURE_CONTENT_TYPE_NOSNIFF = False
+SECURE_CROSS_ORIGIN_OPENER_POLICY = None
 
 # ---------------------------------------------------------------------------
 # CAPTCHA — shorter expiry for fast testing

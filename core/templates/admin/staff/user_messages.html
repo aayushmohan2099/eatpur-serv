@@ -1,0 +1,138 @@
+{% extends is_ajax|yesno:"admin/ajax_base.html,admin/base_site.html" %}
+
+{% block main_content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Customer Messages</h1>
+    <p class="page-subtitle">Conversations between customers and your support team.</p>
+  </div>
+</div>
+
+<div class="messages-layout">
+
+  <!-- Conversation list -->
+  <div class="convo-list" id="convoList">
+    <div class="convo-list-header">
+      <h3>Customer Threads</h3>
+      <span style="font-size:12px;color:var(--text-muted);">{{ conversations|length }}</span>
+    </div>
+
+    {% for convo in conversations %}
+    <a class="convo-item {% if forloop.first %}active{% endif %}"
+       data-user-id="{{ convo.other_user.id }}"
+       onclick="loadCustomerThread({{ convo.other_user.id }}, '{{ convo.other_user.username }}'); return false;"
+       href="#">
+      <img class="convo-item-avatar"
+           src="https://ui-avatars.com/api/?name={{ convo.other_user.username }}&background=3b82f6&color=fff&size=38"
+           alt="{{ convo.other_user.username }}">
+      <div class="convo-item-body">
+        <div class="convo-item-name">
+          {{ convo.other_user.username }}
+          <span class="badge badge-blue" style="font-size:9px;margin-left:4px;">CUSTOMER</span>
+        </div>
+        <div class="convo-item-preview">{{ convo.latest_preview }}</div>
+      </div>
+      <div class="convo-item-meta">
+        {{ convo.latest_time|timesince }} ago
+        {% if convo.unread %}<div class="unread-dot"></div>{% endif %}
+      </div>
+    </a>
+    {% empty %}
+    <div class="empty-state">
+      <div class="empty-state-icon">👥</div>
+      <h3>No customer messages</h3>
+      <p>Customer enquiries will appear here.</p>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Thread panel -->
+  <div class="message-thread" id="messageThread">
+    {% if conversations %}
+      <div class="thread-header" id="threadHeader">
+        <img id="threadAvatar" src="" alt="">
+        <div class="thread-header-info">
+          <h4 id="threadName">{{ conversations.0.other_user.username }}</h4>
+          <span style="color:var(--info);">Customer</span>
+        </div>
+        <div style="margin-left:auto;">
+          <button class="btn btn-sm btn-secondary" onclick="markAllRead()">Mark as Read</button>
+        </div>
+      </div>
+      <div class="thread-body" id="threadBody">
+        <div class="loading-spinner"></div>
+      </div>
+      <div class="thread-composer" id="threadComposer">
+        <textarea id="msgInput" placeholder="Reply to customer…" rows="1"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendReply();}"></textarea>
+        <button class="btn btn-primary" onclick="sendReply()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          Reply
+        </button>
+      </div>
+    {% else %}
+      <div class="thread-empty">No customer conversations yet.</div>
+    {% endif %}
+  </div>
+
+</div>
+
+<script>
+let activeUserId = {% if conversations %}{{ conversations.0.other_user.id }}{% else %}null{% endif %};
+const sendUrl   = "{% url 'custom_admin:staff_send_message' %}";
+const threadUrl = "{% url 'custom_admin:staff_customer_thread' %}";
+const markUrl   = "{% url 'custom_admin:staff_mark_read' %}";
+
+{% if conversations %}
+document.addEventListener('DOMContentLoaded', () => {
+  loadCustomerThread(activeUserId, '{{ conversations.0.other_user.username }}');
+});
+{% endif %}
+
+async function loadCustomerThread(userId, username) {
+  activeUserId = userId;
+  document.querySelectorAll('.convo-item').forEach(el => el.classList.remove('active'));
+  const el = document.querySelector(`[data-user-id="${userId}"]`);
+  if (el) el.classList.add('active');
+  const avatar = document.getElementById('threadAvatar');
+  const name   = document.getElementById('threadName');
+  if (avatar) avatar.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=3b82f6&color=fff&size=34`;
+  if (name)   name.textContent = username;
+  const body = document.getElementById('threadBody');
+  if (!body) return;
+  body.innerHTML = '<div class="loading-spinner"></div>';
+  const data = await apiGet(`${threadUrl}?user_id=${userId}`);
+  if (!data.messages) { body.innerHTML = '<div class="empty-state"><p>Failed to load.</p></div>'; return; }
+  body.innerHTML = data.messages.map(m => `
+    <div class="msg-bubble-wrap ${m.is_mine ? 'mine' : ''}">
+      <img class="msg-bubble-avatar"
+           src="https://ui-avatars.com/api/?name=${encodeURIComponent(m.sender)}&background=${m.is_mine ? '22c55e' : '3b82f6'}&color=fff&size=28"
+           alt="${m.sender}">
+      <div>
+        <div class="msg-bubble ${m.is_mine ? 'mine' : 'theirs'}">${m.text}</div>
+        <div class="msg-meta">${m.time}</div>
+      </div>
+    </div>`).join('');
+  body.scrollTop = body.scrollHeight;
+}
+
+async function sendReply() {
+  const input = document.getElementById('msgInput');
+  const text  = input.value.trim();
+  if (!text || !activeUserId) return;
+  input.value = '';
+  const result = await apiPost(sendUrl, { receiver_id: activeUserId, text });
+  if (result.success) {
+    loadCustomerThread(activeUserId, document.getElementById('threadName').textContent);
+  } else {
+    toast(result.error || 'Failed to send.', 'error');
+  }
+}
+
+async function markAllRead() {
+  if (!activeUserId) return;
+  const result = await apiPost(markUrl, { user_id: activeUserId });
+  if (result.success) toast('Marked as read.');
+}
+</script>
+{% endblock %}

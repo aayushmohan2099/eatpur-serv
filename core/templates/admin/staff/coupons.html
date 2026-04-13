@@ -1,0 +1,157 @@
+{% extends is_ajax|yesno:"admin/ajax_base.html,admin/base_site.html" %}
+
+{% block main_content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Coupons</h1>
+    <p class="page-subtitle">View active discount codes. Contact a Supervisor to create or delete coupons.</p>
+  </div>
+</div>
+
+<!-- Quick stats -->
+<div class="cards-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:24px;">
+  <div class="stat-card">
+    <div class="stat-card-icon green">🟢</div>
+    <div class="stat-card-label">Ongoing</div>
+    <div class="stat-card-value">{{ count_ongoing }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-icon red">🔴</div>
+    <div class="stat-card-label">Expired</div>
+    <div class="stat-card-value">{{ count_expired }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-icon grey">⚫</div>
+    <div class="stat-card-label">Draft</div>
+    <div class="stat-card-value">{{ count_draft }}</div>
+  </div>
+</div>
+
+<div class="section-card">
+  <div class="section-card-header">
+    <span class="section-card-title">All Coupons</span>
+    <div class="table-toolbar" style="padding:0;border:none;">
+      <div class="table-search">
+        <svg class="table-search-icon" viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="6" stroke="currentColor" stroke-width="1.5"/><path d="M13.5 13.5L17 17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        <input type="text" placeholder="Search coupons…" data-table-search="coupons">
+      </div>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table data-table="coupons" data-per-page="20">
+      <thead>
+        <tr>
+          <th data-col="0">Coupon Code <span class="sort-arrow"></span></th>
+          <th data-col="1">Type <span class="sort-arrow"></span></th>
+          <th data-col="2">Value <span class="sort-arrow"></span></th>
+          <th data-col="3">Valid From <span class="sort-arrow"></span></th>
+          <th data-col="4">Valid Until <span class="sort-arrow"></span></th>
+          <th data-col="5">Status <span class="sort-arrow"></span></th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for coupon in coupons %}
+        <tr id="coupon-row-{{ coupon.id }}">
+          <td class="td-mono" style="font-weight:600;letter-spacing:.5px;">{{ coupon.coupon_code }}</td>
+          <td>
+            {% if coupon.discount_type == "PERCENT" %}
+              <span class="badge badge-blue">% Percent</span>
+            {% else %}
+              <span class="badge badge-green">₹ Flat</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if coupon.discount_type == "PERCENT" %}{{ coupon.discount_value }}%
+            {% else %}₹{{ coupon.discount_value }}{% endif %}
+          </td>
+          <td class="td-muted">{{ coupon.start_date|date:"d M Y" }}</td>
+          <td class="td-muted">{{ coupon.end_date|date:"d M Y" }}</td>
+          <td id="coupon-status-{{ coupon.id }}">
+            {% if coupon.status.status_name == "ONGOING" %}<span class="badge badge-green">ONGOING</span>
+            {% elif coupon.status.status_name == "EXPIRED" %}<span class="badge badge-red">EXPIRED</span>
+            {% else %}<span class="badge badge-grey">DRAFT</span>{% endif %}
+          </td>
+          <td>
+            <div class="td-actions">
+              <button class="btn btn-sm btn-secondary" onclick="viewCoupon({{ coupon.id }})">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                View
+              </button>
+              <button class="btn btn-sm {% if coupon.status.status_name == 'ONGOING' %}btn-danger{% else %}btn-primary{% endif %}"
+                      onclick="toggleCoupon({{ coupon.id }}, '{{ coupon.status.status_name }}', '{{ coupon.coupon_code }}')">
+                {% if coupon.status.status_name == "ONGOING" %}Deactivate{% else %}Activate{% endif %}
+              </button>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="7">
+            <div class="empty-state">
+              <div class="empty-state-icon">🏷️</div>
+              <h3>No coupons found</h3>
+              <p>Contact a Supervisor to create discount codes.</p>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div data-table-pagination="coupons" class="pagination"></div>
+</div>
+
+<script>
+const toggleCouponUrl = "{% url 'custom_admin:api_coupon_toggle' pk=0 %}".replace('/0/', '/');
+const couponDetailUrl  = "{% url 'custom_admin:api_coupon_detail' pk=0 %}".replace('/0/', '/');
+
+async function toggleCoupon(id, currentStatus, code) {
+  const newStatus = currentStatus === 'ONGOING' ? 'EXPIRED' : 'ONGOING';
+  const action    = newStatus === 'ONGOING' ? 'activate' : 'deactivate';
+
+  openModal(
+    `${action.charAt(0).toUpperCase() + action.slice(1)} Coupon`,
+    `<p style="font-size:14px;">Are you sure you want to <strong>${action}</strong> coupon <code style="background:var(--bg);padding:2px 6px;border-radius:4px;">${code}</code>?</p>`,
+    `<button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+     <button class="btn btn-primary" id="confirmToggle">Confirm</button>`,
+    { size: 'narrow' }
+  );
+
+  document.getElementById('confirmToggle').addEventListener('click', async () => {
+    document.getElementById('confirmToggle').textContent = 'Saving…';
+    const result = await apiPatch(`${toggleCouponUrl}${id}/`, { status: newStatus });
+    if (result.success) {
+      closeModal();
+      toast(`Coupon ${action}d successfully.`);
+      // Update row DOM without reload
+      const cell = document.getElementById(`coupon-status-${id}`);
+      if (cell) {
+        cell.innerHTML = newStatus === 'ONGOING'
+          ? '<span class="badge badge-green">ONGOING</span>'
+          : '<span class="badge badge-red">EXPIRED</span>';
+      }
+    } else {
+      toast(result.error || 'Failed to update.', 'error');
+      closeModal();
+    }
+  });
+}
+
+async function viewCoupon(id) {
+  const data = await apiGet(`${couponDetailUrl}${id}/`);
+  if (!data.coupon) { toast('Failed to load.', 'error'); return; }
+  const c = data.coupon;
+  viewModal('Coupon Details', [
+    { label: 'Code',           value: `<code>${c.coupon_code}</code>` },
+    { label: 'Discount Type',  value: c.discount_type },
+    { label: 'Discount Value', value: c.discount_type === 'PERCENT' ? `${c.discount_value}%` : `₹${c.discount_value}` },
+    { label: 'Valid From',     value: c.start_date },
+    { label: 'Valid Until',    value: c.end_date },
+    { label: 'Status',         value: c.status },
+    { label: 'Description',    value: c.description || '—' },
+  ]);
+}
+</script>
+{% endblock %}
