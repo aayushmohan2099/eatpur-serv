@@ -238,3 +238,25 @@ class Inbox(SoftDeleteMixin):
 
     def __str__(self):
         return f"Inbox[{self.user}] — {self.inbox_type} — Msg#{self.message_auth_id}"
+
+
+class GoogleFormResponse (SoftDeleteMixin):
+    """
+    Specialized model for Google Form responses.
+    """
+
+    stars = models.IntegerField(null=True, blank=True)
+    response_url = models.URLField(verbose_name="Google Form URL")
+    name = models.CharField(max_length=255, verbose_name="Responder's Name", default="Anonymous")
+    mobile = models.CharField(max_length=20, verbose_name="Responder's Mobile Number", default="N/A")
+    email = models.EmailField(verbose_name="Responder's Email", null=True, blank=True, default="N/A")
+    response_description = models.TextField(verbose_name="Response Description")
+    address = models.TextField(null=True, blank=True, verbose_name="Responder address")
+
+    class Meta:
+        db_table = "google_form_responses"
+        verbose_name = "Google Form Response"
+        verbose_name_plural = "Google Form Responses"
+
+    def __str__(self):
+        return f"GoogleFormResponse for Msg#{self.email} — {self.response_description}"

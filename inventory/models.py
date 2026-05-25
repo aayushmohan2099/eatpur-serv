@@ -230,6 +230,8 @@ class Product(SoftDeleteMixin):
     )
     description = models.TextField(blank=True, verbose_name="Description")
 
+    is_trending = models.BooleanField(default=False, db_index=True, verbose_name="Is Trending")
+
     category = models.ForeignKey(
         ProductCategory,
         on_delete=models.SET_NULL,

@@ -27,16 +27,15 @@ class Role(SoftDeleteMixin):
     Lookup table for user roles.
     Stored as plain strings (not DB ENUM) so new roles require no migration.
 
-    Examples: ADMIN, DEV, CUSTOMER, STAFF, SUPERVISOR, INVENTORY_MANAGER
+    Examples: ADMIN, CUSTOMER, STAFF, INVENTORY_MANAGER
     """
 
     ROLE_CHOICES = [
         ("ADMIN", "Admin"),
-        ("DEV", "Developer"),
         ("CUSTOMER", "Customer"),
         ("STAFF", "Staff"),
-        ("SUPERVISOR", "Supervisor"),
         ("INVENTORY_MANAGER", "Inventory Manager"),
+        ('SUPERVISOR', "Supervisor")
     ]
 
     role_name = models.CharField(

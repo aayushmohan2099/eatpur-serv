@@ -1,103 +1,77 @@
 """
 blog/views.py
-=============
-Blog API views.
-
-Endpoints
----------
-BlogViewSet
-    GET    /blogs/                → list (BlogListSerializer)
-    POST   /blogs/                → create (BlogWriteSerializer, multipart)
-    GET    /blogs/{id}/           → retrieve (BlogDetailSerializer)
-    PUT    /blogs/{id}/           → full update (BlogWriteSerializer)
-    PATCH  /blogs/{id}/           → partial update (BlogWriteSerializer)
-    DELETE /blogs/{id}/           → soft delete
-    GET    /blogs/{id}/full/      → alias for retrieve (same BlogDetailSerializer)
-    POST   /blogs/{id}/publish/   → publish a blog
-    POST   /blogs/{id}/unpublish/ → unpublish a blog
-
-BlogReactionView
-    POST   /blogs/{id}/react/     → toggle like/dislike (auth or anonymous)
-
-BlogCommentView
-    GET    /blogs/{id}/comments/  → paginated approved comments
-    POST   /blogs/{id}/comments/  → submit a comment
-
-BlogCommentApproveView
-    POST   /comments/{id}/approve/ → staff-only comment approval
 """
 
 from django.shortcuts import get_object_or_404
 from django.db import models as db_models
-
 from rest_framework import viewsets, status, permissions, filters
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.pagination import PageNumberPagination
+from django.db.models import OuterRef, Subquery, Q
 
 from core.mixins import get_client_ip
-
-from .models import Blog, BlogReaction, BlogComment
-from .serializers import (
-    BlogListSerializer,
-    BlogDetailSerializer,
-    BlogWriteSerializer,
-    BlogCommentSerializer,
-    BlogReactionSerializer,
-)
-
-
-# ===========================================================================
-# Pagination
-# ===========================================================================
+from .models import *
+from .serializers import *
 
 class BlogCommentPagination(PageNumberPagination):
     page_size = 20
     page_size_query_param = "page_size"
     max_page_size = 100
 
-
 class BlogPagination(PageNumberPagination):
     page_size = 12
     page_size_query_param = "page_size"
     max_page_size = 100
-
 
 # ===========================================================================
 # BlogViewSet
 # ===========================================================================
 
 class BlogViewSet(viewsets.ModelViewSet):
-    """
-    Full CRUD for Blog.
-
-    - List / retrieve are public.
-    - Create / update / delete require authentication.
-    - Soft delete is used instead of hard delete.
-
-    Serializer selection
-    --------------------
-    list     → BlogListSerializer   (lightweight, no blocks/comments)
-    retrieve → BlogDetailSerializer (full nested payload)
-    write    → BlogWriteSerializer  (handles multipart blocks)
-    """
-
     pagination_class = BlogPagination
     parser_classes = (MultiPartParser, FormParser, JSONParser)
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ["title", "meta_description"]
+    search_fields = ["title", "meta_description", "guest_name", "author__username"]
     ordering_fields = ["published_at", "created_at", "title"]
     ordering = ["-published_at"]
 
     def get_queryset(self):
-        qs = Blog.objects.select_related("author")
+        # 1. Prepare a subquery to get the MOST RECENT status for each blog
+        latest_approval = BlogApproval.objects.filter(
+            blog=OuterRef('pk')
+        ).order_by('-pk')  # Using -pk guarantees the chronologically latest record
 
-        # Public: only published blogs. Staff: all.
+        qs = Blog.objects.select_related("author").prefetch_related("approval")
+        
+        # 2. Annotate every blog with its current (latest) approval status
+        qs = qs.annotate(
+            current_approval_status=Subquery(latest_approval.values('status')[:1])
+        )
+
+        # 3. Apply filters based on user role
         if not (self.request.user.is_authenticated and self.request.user.is_staff):
-            qs = qs.filter(is_published=True)
+            # Normal users ONLY see currently APPROVED and published blogs
+            qs = qs.filter(is_published=True, current_approval_status="APPROVED")
+        else:
+            # Staff users can filter via query param: ?approval_status=PENDING
+            approval_status_param = self.request.query_params.get('approval_status')
+            
+            if approval_status_param:
+                approval_status_param = approval_status_param.upper()
+                
+                if approval_status_param == "DRAFT":
+                    # Handle DRAFT or edge cases where no approval record exists yet
+                    qs = qs.filter(
+                        Q(current_approval_status="DRAFT") | 
+                        Q(current_approval_status__isnull=True)
+                    )
+                else:
+                    qs = qs.filter(current_approval_status=approval_status_param)
 
+        # 4. Handle optimizations for detail views
         action = self.action
         if action in ("retrieve", "get_full_blog"):
             qs = qs.prefetch_related(
@@ -117,7 +91,7 @@ class BlogViewSet(viewsets.ModelViewSet):
             return BlogListSerializer
         if self.action in ("retrieve", "get_full_blog"):
             return BlogDetailSerializer
-        return BlogWriteSerializer  # create, update, partial_update
+        return BlogWriteSerializer
 
     def get_serializer_context(self):
         ctx = super().get_serializer_context()
@@ -125,129 +99,80 @@ class BlogViewSet(viewsets.ModelViewSet):
         return ctx
 
     def get_permissions(self):
-        """
-        list / retrieve / get_full_blog → AllowAny
-        everything else                 → IsAuthenticated
-        """
+        # AllowAny can List AND Retrieve blogs
         if self.action in ("list", "retrieve", "get_full_blog"):
             return [permissions.AllowAny()]
+        # Creating, Updating, deleting, publishing require auth
         return [permissions.IsAuthenticated()]
 
-    # ------------------------------------------------------------------
-    # Write helpers
-    # ------------------------------------------------------------------
-
     def perform_create(self, serializer):
-        serializer.save()  # author + IP injected inside serializer.create()
+        blog_instance = serializer.save()
+
+        BlogApproval.objects.create(
+            blog=blog_instance,
+            status="PENDING"
+        )
 
     def perform_update(self, serializer):
-        serializer.save()  # IP injected inside serializer.update()
+        serializer.save()
 
     def perform_destroy(self, instance):
         ip = get_client_ip(self.request)
         instance.soft_delete(ip=ip)
 
-    # ------------------------------------------------------------------
-    # Extra actions
-    # ------------------------------------------------------------------
-
     @action(detail=True, methods=["get"], url_path="full", permission_classes=[permissions.AllowAny])
     def get_full_blog(self, request, pk=None):
-        """Alias for retrieve — returns full BlogDetailSerializer payload."""
         blog = self.get_object()
         serializer = BlogDetailSerializer(blog, context=self.get_serializer_context())
         return Response(serializer.data)
 
-    @action(
-        detail=True, methods=["post"], url_path="publish",
-        permission_classes=[permissions.IsAuthenticated]
-    )
+    @action(detail=True, methods=["post"], url_path="publish", permission_classes=[permissions.IsAuthenticated])
     def publish(self, request, pk=None):
-        """Publish a blog post and stamp published_at."""
         blog = self.get_object()
         if blog.is_published:
-            return Response({"detail": "Blog is already published."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "Already published."}, status=status.HTTP_400_BAD_REQUEST)
         blog.publish(ip=get_client_ip(request))
-        return Response(
-            {"detail": "Blog published.", "published_at": blog.published_at},
-            status=status.HTTP_200_OK,
-        )
+        return Response({"detail": "Published.", "published_at": blog.published_at}, status=status.HTTP_200_OK)
 
-    @action(
-        detail=True, methods=["post"], url_path="unpublish",
-        permission_classes=[permissions.IsAuthenticated]
-    )
+    @action(detail=True, methods=["post"], url_path="unpublish", permission_classes=[permissions.IsAuthenticated])
     def unpublish(self, request, pk=None):
-        """Revert a blog to draft / unpublished state."""
         blog = self.get_object()
         if not blog.is_published:
-            return Response({"detail": "Blog is already unpublished."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "Already unpublished."}, status=status.HTTP_400_BAD_REQUEST)
         blog.unpublish(ip=get_client_ip(request))
-        return Response({"detail": "Blog unpublished."}, status=status.HTTP_200_OK)
+        return Response({"detail": "Unpublished."}, status=status.HTTP_200_OK)
 
 
 # ===========================================================================
-# BlogReactionView
+# BlogReactionView (STRICT AUTH)
 # ===========================================================================
 
 class BlogReactionView(APIView):
-    """
-    POST /blogs/{id}/react/
-    Body: { "reaction_type": "like" | "dislike" }
 
-    Reaction logic
-    --------------
-    Authenticated user:
-        Lookup by (blog, user).
-        Toggle off if same type; switch type if different.
-
-    Anonymous user:
-        Lookup by (blog, ip_address).
-        Same toggle / switch logic.
-
-    Reaction is soft-deleted (not hard-deleted) so we retain history.
-    When re-reacting after removal, the soft-deleted row is restored.
-    """
-
-    permission_classes = [permissions.AllowAny]
+    def get_permissions(self):
+        # Anyone can GET Reactions, but POST requires Auth
+        if self.request.method == 'GET':
+            return [permissions.AllowAny()]
+        return [permissions.IsAuthenticated()]
 
     def post(self, request, blog_id):
         reaction_type = request.data.get("reaction_type")
         if reaction_type not in ("like", "dislike"):
-            return Response(
-                {"error": "Invalid reaction_type. Must be 'like' or 'dislike'."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"error": "Invalid reaction_type."}, status=status.HTTP_400_BAD_REQUEST)
 
         blog = get_object_or_404(Blog, pk=blog_id, is_deleted=False, is_published=True)
         ip = get_client_ip(request)
 
-        # ------------------------------------------------------------------
-        # Build lookup kwargs depending on auth state
-        # ------------------------------------------------------------------
-        if request.user.is_authenticated:
-            lookup = {"blog": blog, "user": request.user}
-        else:
-            # Anonymous: match on IP; user must be NULL
-            lookup = {"blog": blog, "ip_address": ip, "user__isnull": True}
-
-        reaction = BlogReaction.all_objects.filter(**lookup).first()
+        # Lookup by exact authenticated user
+        reaction = BlogReaction.all_objects.filter(blog=blog, user=request.user).first()
 
         if reaction is None:
-            # No prior reaction — create fresh
             BlogReaction.objects.create(
-                blog=blog,
-                user=request.user if request.user.is_authenticated else None,
-                reaction_type=reaction_type,
-                ip_address=ip,
+                blog=blog, user=request.user, reaction_type=reaction_type, ip_address=ip
             )
-            return Response(
-                {"message": f"Reaction '{reaction_type}' added."},
-                status=status.HTTP_201_CREATED,
-            )
+            return Response({"message": f"Reaction '{reaction_type}' added."}, status=status.HTTP_201_CREATED)
 
         if reaction.is_deleted:
-            # Previously removed — restore with (possibly new) type
             reaction.is_deleted = False
             reaction.deleted_at = None
             reaction.reaction_type = reaction_type
@@ -256,11 +181,9 @@ class BlogReactionView(APIView):
             return Response({"message": f"Reaction '{reaction_type}' restored."})
 
         if reaction.reaction_type == reaction_type:
-            # Same type tapped again → toggle off (soft delete)
             reaction.soft_delete(ip=ip)
             return Response({"message": f"Reaction '{reaction_type}' removed."})
 
-        # Different type → switch reaction
         reaction.reaction_type = reaction_type
         reaction.updated_by_ip = ip
         reaction.save(update_fields=["reaction_type", "updated_by_ip", "updated_at"])
@@ -268,21 +191,15 @@ class BlogReactionView(APIView):
 
 
 # ===========================================================================
-# BlogCommentView
+# BlogCommentView (STRICT AUTH)
 # ===========================================================================
 
 class BlogCommentView(APIView):
-    """
-    GET  /blogs/{id}/comments/ — paginated list of approved top-level comments
-    POST /blogs/{id}/comments/ — submit a new comment
-
-    Authentication is optional for both methods.
-    Authenticated users get auto-approved comments (configurable).
-    Guest comments go into moderation (is_approved=False).
-    """
-
-    permission_classes = [permissions.AllowAny]
-    pagination_class = BlogCommentPagination
+    def get_permissions(self):
+        # Anyone can GET comments, but POST requires Auth
+        if self.request.method == 'GET':
+            return [permissions.AllowAny()]
+        return [permissions.IsAuthenticated()]
 
     def get(self, request, blog_id):
         blog = get_object_or_404(Blog, pk=blog_id, is_deleted=False)
@@ -293,8 +210,7 @@ class BlogCommentView(APIView):
             .prefetch_related("replies")
             .order_by("created_at")
         )
-
-        paginator = self.pagination_class()
+        paginator = BlogCommentPagination()
         page = paginator.paginate_queryset(qs, request)
         serializer = BlogCommentSerializer(page, many=True, context={"request": request})
         return paginator.get_paginated_response(serializer.data)
@@ -303,31 +219,24 @@ class BlogCommentView(APIView):
         blog = get_object_or_404(Blog, pk=blog_id, is_deleted=False, is_published=True)
         ip = get_client_ip(request)
 
-        # Build mutable data dict
         data = {
             "blog": blog.pk,
             "content": request.data.get("content"),
-            "name": request.data.get("name"),
-            "email": request.data.get("email"),
-            "parent": request.data.get("parent"),  # optional FK id
+            "parent": request.data.get("parent"),
         }
 
         serializer = BlogCommentSerializer(data=data, context={"request": request})
         serializer.is_valid(raise_exception=True)
 
-        # Inject server-side fields
-        auto_approve = request.user.is_authenticated
         comment = serializer.save(
             ip_address=ip,
-            user=request.user if request.user.is_authenticated else None,
-            is_approved=auto_approve,
+            user=request.user,  # Guaranteed by IsAuthenticated
+            is_approved=True,   # Auto-approve since they are logged in (optional logic choice)
         )
 
-        # Stamp approved_at for auto-approved comments
-        if auto_approve:
-            from django.utils import timezone
-            comment.approved_at = timezone.now()
-            comment.save(update_fields=["approved_at"])
+        from django.utils import timezone
+        comment.approved_at = timezone.now()
+        comment.save(update_fields=["approved_at"])
 
         return Response(
             BlogCommentSerializer(comment, context={"request": request}).data,
@@ -335,31 +244,103 @@ class BlogCommentView(APIView):
         )
 
 
-# ===========================================================================
-# BlogCommentApproveView — Staff-only moderation
-# ===========================================================================
-
 class BlogCommentApproveView(APIView):
-    """
-    POST /comments/{id}/approve/
-
-    Creator-only endpoint to approve a pending comment. Creator of the blog is the ONLY one who can approve or reject any comment.
-    Returns the updated comment serialized with full threading.
-    """
-
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, comment_id):
         comment = get_object_or_404(BlogComment, pk=comment_id, is_deleted=False)
-
         if comment.is_approved:
-            return Response(
-                {"detail": "Comment is already approved."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"detail": "Comment is already approved."}, status=status.HTTP_400_BAD_REQUEST)
 
         comment.approve(ip=get_client_ip(request))
         return Response(
             BlogCommentSerializer(comment, context={"request": request}).data,
             status=status.HTTP_200_OK,
+        )
+    
+# ===========================================================================
+# BlogApproval - Workflow
+# ===========================================================================    
+
+class BlogReviewAPIView(APIView):
+    """
+    POST Endpoint to Approve or Reject a Blog.
+    Expected Payload (Approval): {"blog": 1, "status": "APPROVED"}
+    Expected Payload (Rejection): {"blog": 1, "status": "REJECTED", "rejection_reason": "Spam content"}
+    """
+    # Ensure only authenticated users (and ideally only staff) can access this
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser] 
+
+    def post(self, request, *args, **kwargs):
+        serializer = BlogReviewSerializer(data=request.data)
+        
+        if serializer.is_valid():
+            approval_status = serializer.validated_data.get('status')
+            
+            # Base arguments injected automatically bypassing the request payload
+            save_kwargs = {
+                'approver': request.user
+            }
+            
+            # Set the rejection date if rejected
+            if approval_status == 'REJECTED':
+                save_kwargs['date_of_rejection'] = timezone.now().date()
+            
+            # Save the new BlogApproval history record
+            serializer.save(**save_kwargs)
+            
+            return Response(
+                {
+                    "detail": f"Blog successfully {approval_status.lower()}.",
+                    "data": serializer.data
+                },
+                status=status.HTTP_201_CREATED
+            )
+            
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# ===========================================================================
+# BlogPublish 
+# ===========================================================================    
+
+class ToggleBlogPublishAPIView(APIView):
+    """
+    Toggle blog publish status.
+    
+    Payload:
+    {
+        "blog": 1
+    }
+    """
+
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+
+    def post(self, request, *args, **kwargs):
+        blog_id = request.data.get("blog")
+
+        if not blog_id:
+            return Response(
+                {"detail": "Blog ID is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        blog = get_object_or_404(Blog, id=blog_id)
+
+        # Toggle publish status
+        blog.is_published = not blog.is_published
+
+        # Set published_at only when publishing first time
+        if blog.is_published and not blog.published_at:
+            blog.published_at = timezone.now()
+
+        blog.save(update_fields=["is_published", "published_at", "updated_at"])
+
+        return Response(
+            {
+                "detail": f"Blog {'published' if blog.is_published else 'unpublished'} successfully.",
+                "is_published": blog.is_published,
+                "blog_id": blog.id,
+            },
+            status=status.HTTP_200_OK
         )

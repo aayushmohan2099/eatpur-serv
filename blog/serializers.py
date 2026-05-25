@@ -1,30 +1,16 @@
 """
 blog/serializers.py
-===================
-Serializers for Blog, BlogBlock, BlogReaction, and BlogComment.
-
-Design decisions
-----------------
-* BlogListSerializer  — lightweight, no blocks/comments, for list endpoints
-* BlogDetailSerializer— full nested output with blocks, counts, threaded comments
-* BlogWriteSerializer — handles multipart form data for create/update
-* BlogBlockSerializer — read-only nested output; separate write path via BlogWriteSerializer
-* BlogCommentSerializer — recursive replies (2-level safe for most use cases)
-* BlogReactionSerializer — minimal; reactions are managed via a dedicated view
 """
 
 from rest_framework import serializers
 from django.utils.text import slugify
-from .models import Blog, BlogBlock, BlogReaction, BlogComment
-
+from .models import *
 
 # ===========================================================================
 # BlogBlock
 # ===========================================================================
 
 class BlogBlockReadSerializer(serializers.ModelSerializer):
-    """Lightweight block serializer used inside BlogDetailSerializer."""
-
     class Meta:
         model = BlogBlock
         fields = ["id", "type", "order", "content", "image", "meta"]
@@ -32,11 +18,6 @@ class BlogBlockReadSerializer(serializers.ModelSerializer):
 
 
 class BlogBlockWriteSerializer(serializers.ModelSerializer):
-    """
-    Used internally when creating/updating blocks from BlogWriteSerializer.
-    `blog` is injected by the parent — not exposed to the client.
-    """
-
     class Meta:
         model = BlogBlock
         fields = ["type", "order", "content", "image", "meta"]
@@ -47,13 +28,9 @@ class BlogBlockWriteSerializer(serializers.ModelSerializer):
         image = attrs.get("image")
 
         if block_type == "image" and not image:
-            raise serializers.ValidationError(
-                {"image": "An image file is required for blocks of type 'image'."}
-            )
+            raise serializers.ValidationError({"image": "An image file is required for image blocks."})
         if block_type in ("text", "video", "quote", "code") and not content:
-            raise serializers.ValidationError(
-                {"content": f"Content is required for blocks of type '{block_type}'."}
-            )
+            raise serializers.ValidationError({"content": f"Content is required for '{block_type}' blocks."})
         return attrs
 
 
@@ -62,35 +39,18 @@ class BlogBlockWriteSerializer(serializers.ModelSerializer):
 # ===========================================================================
 
 class BlogCommentReplySerializer(serializers.ModelSerializer):
-    """
-    Flat serializer for replies (one level deep).
-    Using a flat serializer here (not recursive) avoids N+1 hell.
-    """
     display_name = serializers.CharField(read_only=True)
     is_reply = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = BlogComment
         fields = [
-            "id", "display_name", "name", "email",
-            "content", "is_approved", "created_at", "is_reply",
+            "id", "display_name", "content", "is_approved", "created_at", "is_reply",
         ]
-        read_only_fields = [
-            "id", "display_name", "is_approved", "created_at", "is_reply",
-        ]
+        read_only_fields = fields
 
 
 class BlogCommentSerializer(serializers.ModelSerializer):
-    """
-    Top-level comment serializer with nested replies.
-
-    Write fields  : blog (injected), name, email, content, parent
-    Read-only     : replies, display_name, is_approved, is_reply, created_at
-
-    `user` is injected from the request in BlogCommentView — not writable
-    by the client directly to prevent impersonation.
-    """
-
     replies = serializers.SerializerMethodField()
     display_name = serializers.CharField(read_only=True)
     is_reply = serializers.BooleanField(read_only=True)
@@ -98,38 +58,21 @@ class BlogCommentSerializer(serializers.ModelSerializer):
     class Meta:
         model = BlogComment
         fields = [
-            "id",
-            "blog",
-            "user",
-            "display_name",
-            "name",
-            "email",
-            "content",
-            "ip_address",
-            "is_approved",
-            "approved_at",
-            "parent",
-            "replies",
-            "is_reply",
-            "created_at",
+            "id", "blog", "user", "display_name", "content", "ip_address",
+            "is_approved", "approved_at", "parent", "replies", "is_reply", "created_at",
         ]
         read_only_fields = [
-            "id", "user", "display_name", "ip_address",
-            "is_approved", "approved_at", "replies",
-            "is_reply", "created_at",
+            "id", "user", "display_name", "ip_address", "is_approved",
+            "approved_at", "replies", "is_reply", "created_at",
         ]
 
     def get_replies(self, obj):
-        """Return approved, non-deleted direct replies only."""
         qs = obj.replies.filter(is_deleted=False, is_approved=True).order_by("created_at")
         return BlogCommentReplySerializer(qs, many=True).data
 
     def validate_parent(self, parent):
-        """Replies can only be one level deep — no nested replies to replies."""
         if parent and parent.parent_id is not None:
-            raise serializers.ValidationError(
-                "Replies to replies are not supported. Please reply to the top-level comment."
-            )
+            raise serializers.ValidationError("Replies to replies are not supported.")
         return parent
 
 
@@ -149,11 +92,8 @@ class BlogReactionSerializer(serializers.ModelSerializer):
 # ===========================================================================
 
 class BlogListSerializer(serializers.ModelSerializer):
-    """
-    Used on list endpoints — no blocks, no comments, just card-level data.
-    Includes live counts via model @property.
-    """
-    author_username = serializers.CharField(source="author.username", read_only=True, default=None)
+    display_author = serializers.SerializerMethodField()
+    approval_status = serializers.SerializerMethodField()
     likes_count = serializers.IntegerField(read_only=True)
     dislikes_count = serializers.IntegerField(read_only=True)
     comments_count = serializers.IntegerField(read_only=True)
@@ -161,24 +101,22 @@ class BlogListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Blog
         fields = [
-            "id",
-            "urid",
-            "title",
-            "slug",
-            "author",
-            "author_username",
-            "cover_image",
-            "meta_description",
-            "read_time_minutes",
-            "is_published",
-            "published_at",
-            "likes_count",
-            "dislikes_count",
-            "comments_count",
-            "created_at",
-            "updated_at",
+            "id", "urid", "title", "slug", "display_author", "approval_status", "cover_image",
+            "meta_description", "read_time_minutes", "is_published", "published_at",
+            "likes_count", "dislikes_count", "comments_count", "created_at", "updated_at",
         ]
-        read_only_fields = fields
+        read_only_fields = list(fields)
+
+    def get_display_author(self, obj):
+        if obj.author:
+            return obj.author.username
+        return obj.guest_name or "Anonymous"
+    
+    def get_approval_status(self, obj):
+        latest_approval = obj.approval.all().last()
+        if latest_approval:
+            return latest_approval.status
+        return "DRAFT"
 
 
 # ===========================================================================
@@ -186,13 +124,9 @@ class BlogListSerializer(serializers.ModelSerializer):
 # ===========================================================================
 
 class BlogDetailSerializer(serializers.ModelSerializer):
-    """
-    Full blog payload returned on retrieve / get_full_blog.
-    Includes ordered blocks and approved top-level comments with replies.
-    """
     blocks = BlogBlockReadSerializer(many=True, read_only=True)
     comments = serializers.SerializerMethodField()
-    author_username = serializers.CharField(source="author.username", read_only=True, default=None)
+    display_author = serializers.SerializerMethodField()
     likes_count = serializers.IntegerField(read_only=True)
     dislikes_count = serializers.IntegerField(read_only=True)
     comments_count = serializers.IntegerField(read_only=True)
@@ -200,32 +134,19 @@ class BlogDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Blog
         fields = [
-            "id",
-            "urid",
-            "title",
-            "slug",
-            "author",
-            "author_username",
-            "cover_image",
-            "meta_description",
-            "read_time_minutes",
-            "is_published",
-            "published_at",
-            "likes_count",
-            "dislikes_count",
-            "comments_count",
-            "blocks",
-            "comments",
-            "created_at",
-            "updated_at",
+            "id", "urid", "title", "slug", "display_author", "cover_image",
+            "meta_description", "read_time_minutes", "is_published", "published_at",
+            "likes_count", "dislikes_count", "comments_count", "blocks", "comments",
+            "created_at", "updated_at",
         ]
         read_only_fields = fields
 
+    def get_display_author(self, obj):
+        if obj.author:
+            return obj.author.username
+        return obj.guest_name or "Anonymous"
+
     def get_comments(self, obj):
-        """
-        Return only approved, non-deleted, top-level comments.
-        Replies are nested inside each comment by BlogCommentSerializer.
-        """
         qs = (
             obj.comments
             .filter(is_deleted=False, is_approved=True, parent__isnull=True)
@@ -241,40 +162,16 @@ class BlogDetailSerializer(serializers.ModelSerializer):
 # ===========================================================================
 
 class BlogWriteSerializer(serializers.ModelSerializer):
-    """
-    Handles Blog creation and updates including multipart block data.
-
-    Block data is passed as indexed form fields:
-        blocks[0][type]    = text
-        blocks[0][order]   = 1
-        blocks[0][content] = Hello world
-        blocks[1][type]    = image
-        blocks[1][order]   = 2
-        blocks[1][image]   = <file>
-
-    On update, all existing blocks are replaced (full-replace strategy).
-    Partial block updates are handled at the application layer if needed.
-    """
-
     class Meta:
         model = Blog
         fields = [
-            "title",
-            "slug",
-            "author",
-            "cover_image",
-            "meta_description",
-            "read_time_minutes",
-            "is_published",
+            "title", "slug", "author", "guest_name", "cover_image",
+            "meta_description", "read_time_minutes", "is_published",
         ]
         extra_kwargs = {
-            "slug": {"required": False},  # auto-generated from title if not provided
+            "slug": {"required": False},
             "author": {"required": False},
         }
-
-    # ------------------------------------------------------------------
-    # Validation
-    # ------------------------------------------------------------------
 
     def validate_title(self, value):
         if len(value.strip()) < 3:
@@ -282,28 +179,12 @@ class BlogWriteSerializer(serializers.ModelSerializer):
         return value.strip()
 
     def validate(self, attrs):
-        # Auto-generate slug from title if not provided
         if not attrs.get("slug") and attrs.get("title"):
             attrs["slug"] = slugify(attrs["title"])
         return attrs
 
-    # ------------------------------------------------------------------
-    # Block parsing from raw request.data (multipart indexed fields)
-    # ------------------------------------------------------------------
-
     @staticmethod
     def _parse_blocks(request) -> list[dict]:
-        """
-        Parse indexed block fields from multipart request.data / request.FILES.
-
-        Expected format:
-            blocks[0][type]    = "text"
-            blocks[0][order]   = "1"
-            blocks[0][content] = "..."
-            blocks[1][type]    = "image"
-            blocks[1][image]   = <InMemoryUploadedFile>
-            blocks[1][meta]    = '{"alt": "Hero shot"}'   (optional JSON string)
-        """
         import json
         blocks = []
         i = 0
@@ -323,25 +204,18 @@ class BlogWriteSerializer(serializers.ModelSerializer):
                 try:
                     meta = json.loads(meta_raw)
                 except (ValueError, TypeError):
-                    pass  # ignore malformed meta silently
+                    pass 
 
             blocks.append({
-                "type": block_type,
-                "order": int(order_raw),
-                "content": content,
-                "image": image,
-                "meta": meta,
+                "type": block_type, "order": int(order_raw), "content": content,
+                "image": image, "meta": meta,
             })
             i += 1
         return blocks
 
     @staticmethod
     def _validate_and_create_blocks(blog, raw_blocks: list[dict]):
-        """Validate each block dict and bulk-create."""
-        serializers_list = [
-            BlogBlockWriteSerializer(data=b) for b in raw_blocks
-        ]
-        # Validate all before writing any (atomic)
+        serializers_list = [BlogBlockWriteSerializer(data=b) for b in raw_blocks]
         errors = {}
         for idx, s in enumerate(serializers_list):
             if not s.is_valid():
@@ -355,18 +229,18 @@ class BlogWriteSerializer(serializers.ModelSerializer):
             for s in serializers_list
         ])
 
-    # ------------------------------------------------------------------
-    # Create
-    # ------------------------------------------------------------------
-
     def create(self, validated_data):
         request = self.context["request"]
 
-        # Inject author from authenticated user if not explicitly set
-        if not validated_data.get("author") and request.user.is_authenticated:
+        # Handle Anonymous vs Authenticated Authors
+        if request.user.is_authenticated:
             validated_data["author"] = request.user
+        else:
+            validated_data["author"] = None
+            # If front-end doesn't supply a guest_name, we set a fallback
+            if "guest_name" not in validated_data:
+                validated_data["guest_name"] = "Anonymous Guest"
 
-        # Inject IP
         from core.mixins import get_client_ip
         ip = get_client_ip(request)
         validated_data["created_by_ip"] = ip
@@ -380,13 +254,8 @@ class BlogWriteSerializer(serializers.ModelSerializer):
 
         return blog
 
-    # ------------------------------------------------------------------
-    # Update (full block replacement)
-    # ------------------------------------------------------------------
-
     def update(self, instance, validated_data):
         request = self.context["request"]
-
         from core.mixins import get_client_ip
         validated_data["updated_by_ip"] = get_client_ip(request)
 
@@ -396,8 +265,38 @@ class BlogWriteSerializer(serializers.ModelSerializer):
 
         raw_blocks = self._parse_blocks(request)
         if raw_blocks:
-            # Full replacement — soft-delete existing, create new
             instance.blocks.filter(is_deleted=False).update(is_deleted=True)
             self._validate_and_create_blocks(instance, raw_blocks)
 
         return instance
+    
+# ===========================================================================
+# Blog — Approval Serializer
+# ===========================================================================    
+
+class BlogReviewSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BlogApproval
+        fields = ['blog', 'status', 'rejection_reason']
+
+    def validate(self, data):
+        approval_status = data.get('status')
+        rejection_reason = data.get('rejection_reason')
+
+        # 1. Enforce correct status choices for this endpoint
+        if approval_status not in ['APPROVED', 'REJECTED']:
+            raise serializers.ValidationError({
+                "status": "You can only submit 'APPROVED' or 'REJECTED' via this endpoint."
+            })
+
+        # 2. Enforce rejection reason
+        if approval_status == 'REJECTED' and not rejection_reason:
+            raise serializers.ValidationError({
+                "rejection_reason": "A rejection reason must be provided when rejecting a blog."
+            })
+
+        # 3. Clean up rejection reason if they accidentally send one while approving
+        if approval_status == 'APPROVED' and rejection_reason:
+            data['rejection_reason'] = None
+
+        return data
