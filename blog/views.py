@@ -4,15 +4,19 @@ blog/views.py
 
 from django.shortcuts import get_object_or_404
 from django.db import models as db_models
-from rest_framework import viewsets, status, permissions, filters
+from rest_framework import viewsets, status, permissions, filters, generics
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.pagination import PageNumberPagination
-from django.db.models import OuterRef, Subquery, Q
+from django.db.models import OuterRef, Subquery, Q, Count, Sum, IntegerField
+from django.db.models.functions import Coalesce
+from django.utils import timezone
+from datetime import timedelta
 
 from core.mixins import get_client_ip
+from user.models import CustomUser
 from .models import *
 from .serializers import *
 
@@ -344,3 +348,137 @@ class ToggleBlogPublishAPIView(APIView):
             },
             status=status.HTTP_200_OK
         )
+    
+class BlogAnalyticsAPIView(APIView):
+    """
+    Returns complete analytics for the admin dashboard.
+    """
+    permission_classes = [permissions.IsAuthenticated] # Consider adding IsAdminUser
+
+    def get(self, request):
+        # 1. Base Querysets (Excluding Soft-Deleted)
+        blogs = Blog.objects.filter(is_deleted=False)
+        reactions = BlogReaction.objects.filter(is_deleted=False)
+        comments = BlogComment.objects.filter(is_deleted=False)
+
+        # 2. High-Level KPIs
+        total_blogs = blogs.count()
+        published_blogs = blogs.filter(is_published=True).count()
+        
+        # Safely sum views (returns None if no blogs exist, so we default to 0)
+        total_views = blogs.aggregate(Sum('views_count'))['views_count__sum'] or 0
+        
+        total_likes = reactions.filter(reaction_type='like').count()
+        total_dislikes = reactions.filter(reaction_type='dislike').count()
+        total_comments = comments.count()
+
+        # 3. Top 3 Blogs by Engagement (Likes + Comments + Views)
+        # We annotate each blog with its specific counts to avoid N+1 queries
+        top_blogs_qs = blogs.filter(is_published=True).annotate(
+            like_count=Count('reactions', filter=Q(reactions__reaction_type='like', reactions__is_deleted=False), distinct=True),
+            comment_count=Count('comments', filter=Q(comments__is_deleted=False), distinct=True)
+        ).order_by('-views_count', '-like_count')[:3]
+
+        top_blogs_data = []
+        for blog in top_blogs_qs:
+            author_name = blog.author.username if blog.author else blog.guest_name
+            top_blogs_data.append({
+                "id": blog.id,
+                "title": blog.title,
+                "author": author_name,
+                "views": blog.views_count,
+                "likes": blog.like_count,
+                "comments": blog.comment_count,
+                "published_at": blog.published_at.isoformat() if blog.published_at else None,
+            })
+
+        # 4. Status Distribution (From BlogApproval)
+        # Useful for pie charts or progress bars
+        approval_distribution = list(BlogApproval.objects.filter(is_deleted=False)
+            .values('status')
+            .annotate(count=Count('id'))
+            .order_by('-count')
+        )
+
+        # Map the distribution into a clean dictionary: {"APPROVED": 10, "PENDING": 5}
+        status_counts = {item['status']: item['count'] for item in approval_distribution}
+
+        # 5. Recent Activity (Last 7 Days) for Bar Charts
+        seven_days_ago = timezone.now() - timedelta(days=7)
+        recent_blogs_count = blogs.filter(created_at__gte=seven_days_ago).count()
+        recent_comments_count = comments.filter(created_at__gte=seven_days_ago).count()
+
+        # Compile Final Response
+        return Response({
+            "kpis": {
+                "total_blogs": total_blogs,
+                "published_blogs": published_blogs,
+                "total_views": total_views,
+                "total_likes": total_likes,
+                "total_dislikes": total_dislikes,
+                "total_comments": total_comments,
+            },
+            "top_blogs": top_blogs_data,
+            "status_distribution": status_counts,
+            "recent_activity": {
+                "new_blogs_last_7_days": recent_blogs_count,
+                "new_comments_last_7_days": recent_comments_count,
+            }
+        }, status=status.HTTP_200_OK)    
+    
+# ===========================================================================
+# BlogAuthorApi
+# ===========================================================================    
+
+class BlogAuthorAnalyticsView(generics.ListAPIView):
+    """
+    Returns analytics ONLY for users who have created at least one published/draft blog.
+    Uses Subqueries to avoid the dreaded Django Cartesian Product multiplication bug.
+    """
+    serializer_class = BlogAuthorAnalyticsSerializer
+    
+    # Assuming only Staff/Admins should see these analytics
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+
+    def get_queryset(self):
+        # 1. Subquery: Count of blogs by the user
+        blogs_sq = Blog.objects.filter(
+            author=OuterRef('pk'), 
+            is_deleted=False
+        ).values('author').annotate(c=Count('id')).values('c')
+
+        # 2. Subquery: Sum of all views across the user's blogs
+        views_sq = Blog.objects.filter(
+            author=OuterRef('pk'), 
+            is_deleted=False
+        ).values('author').annotate(s=Sum('views_count')).values('s')
+
+        # 3. Subquery: Count of all 'likes' on the user's blogs
+        likes_sq = BlogReaction.objects.filter(
+            blog__author=OuterRef('pk'), 
+            reaction_type='like', 
+            is_deleted=False, 
+            blog__is_deleted=False
+        ).values('blog__author').annotate(c=Count('id')).values('c')
+
+        # 4. Subquery: Count of all comments on the user's blogs
+        comments_sq = BlogComment.objects.filter(
+            blog__author=OuterRef('pk'), 
+            is_deleted=False, 
+            blog__is_deleted=False
+        ).values('blog__author').annotate(c=Count('id')).values('c')
+
+        # Base Query: Get active users, annotate them with the subqueries
+        queryset = CustomUser.objects.filter(
+            is_deleted=False, 
+            blogs__is_deleted=False # Only fetch users tied to at least one active blog
+        ).distinct().annotate(
+            total_blogs=Coalesce(Subquery(blogs_sq, output_field=IntegerField()), 0),
+            total_views=Coalesce(Subquery(views_sq, output_field=IntegerField()), 0),
+            total_likes=Coalesce(Subquery(likes_sq, output_field=IntegerField()), 0),
+            total_comments=Coalesce(Subquery(comments_sq, output_field=IntegerField()), 0),
+        ).filter(
+            total_blogs__gt=0 # Strict check: MUST have more than 0 blogs
+        ).order_by('-total_blogs', '-total_views') # Order by most active authors first
+
+        return queryset

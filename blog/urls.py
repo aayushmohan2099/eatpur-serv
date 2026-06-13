@@ -14,6 +14,9 @@ urlpatterns = [
     # --- ViewSet (CRUD + publish/unpublish/full) ---
     path("", include(router.urls)),
 
+    # --- Analytics ---
+    path('analytics/', BlogAnalyticsAPIView.as_view(), name='blog-analytics'),
+
     # --- Reactions ---
     path(
         "blogs/<int:blog_id>/react/",
@@ -44,4 +47,7 @@ urlpatterns = [
         ToggleBlogPublishAPIView.as_view(),
         name="toggle-blog-publish",
     ),
+
+    # Blog Author Analytics
+    path('authors/', BlogAuthorAnalyticsView.as_view(), name='author-analytics'),
 ]

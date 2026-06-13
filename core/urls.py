@@ -13,6 +13,8 @@ urlpatterns = [
     path('api/auth/', include('auth_app.urls')),
     path('api/global/', include('auth_app.Purls')),
     path('api/blog/', include('blog.urls')),
+    path('api/inventory/', include('inventory.urls')),
+    path('api/admin/', include('user.urls')),
     path('api/', include('messaging.urls')),
     path('api/dashboard/', HomepageDashboardView.as_view(), name='homepage-dashboard'),
 

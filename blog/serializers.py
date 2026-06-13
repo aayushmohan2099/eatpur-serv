@@ -5,6 +5,7 @@ blog/serializers.py
 from rest_framework import serializers
 from django.utils.text import slugify
 from .models import *
+from user.models import CustomUser
 
 # ===========================================================================
 # BlogBlock
@@ -300,3 +301,41 @@ class BlogReviewSerializer(serializers.ModelSerializer):
             data['rejection_reason'] = None
 
         return data
+    
+# ===========================================================================
+# Blog — Author Analytics
+# ===========================================================================    
+
+class BlogAuthorAnalyticsSerializer(serializers.ModelSerializer):
+    total_blogs = serializers.IntegerField(read_only=True)
+    total_views = serializers.IntegerField(read_only=True)
+    total_likes = serializers.IntegerField(read_only=True)
+    total_comments = serializers.IntegerField(read_only=True)
+    
+    # Calculated Fields
+    avg_views = serializers.SerializerMethodField()
+    avg_likes = serializers.SerializerMethodField()
+    avg_comments = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CustomUser
+        fields = [
+            "id", "urid", "username", "email", "avatar",
+            "total_blogs", "total_views", "total_likes", "total_comments",
+            "avg_views", "avg_likes", "avg_comments"
+        ]
+
+    def get_avg_views(self, obj):
+        if obj.total_blogs:
+            return round(obj.total_views / obj.total_blogs, 1)
+        return 0
+
+    def get_avg_likes(self, obj):
+        if obj.total_blogs:
+            return round(obj.total_likes / obj.total_blogs, 1)
+        return 0
+
+    def get_avg_comments(self, obj):
+        if obj.total_blogs:
+            return round(obj.total_comments / obj.total_blogs, 1)
+        return 0

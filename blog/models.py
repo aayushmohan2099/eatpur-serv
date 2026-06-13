@@ -44,6 +44,9 @@ class Blog(SoftDeleteMixin):
     # Publishing
     is_published = models.BooleanField(default=False, db_index=True, verbose_name="Is Published")
     published_at = models.DateTimeField(null=True, blank=True, db_index=True, verbose_name="Published At")
+    views_count = models.PositiveIntegerField(
+        default=0, db_index=True, verbose_name="Total Views"
+    )
 
     class Meta:
         db_table = "blog"
