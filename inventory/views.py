@@ -6,8 +6,9 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import PermissionDenied
 from django.db import transaction
-from django.db.models import Q
-
+from django.db.models import Q, F, ExpressionWrapper, DecimalField
+from rest_framework.generics import ListAPIView
+from rest_framework.permissions import AllowAny
 from .models import *
 from .serializers import *
 from rest_framework.decorators import action
@@ -65,15 +66,8 @@ class ProductViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         role_id = getattr(request.user, "role_id", None)
         
-        # Role-based status assignment
-        if role_id == 5:
-            target_status_code = "OUT_OF_STOCK"
-        elif role_id == 1:
-            target_status_code = "REVIEW"
-        else:
+        if role_id not in [1, 5]:
             raise PermissionDenied("You do not have permission to create products.")
-
-        status_obj, _ = ProductStatus.objects.get_or_create(status_name=target_status_code)
         
         # Extract core fields
         name = request.data.get("name")
@@ -116,6 +110,25 @@ class ProductViewSet(viewsets.ModelViewSet):
                 additional_info=profile_info.get("additional_info", {})
             )
 
+            try:
+                quantity = int(variant.get("quantity", 0) or 0)
+            except (ValueError, TypeError):
+                quantity = 0
+
+            if role_id == 1:
+                status_name = "REVIEW"
+            else:  # role_id == 5
+                if quantity <= 0:
+                    status_name = "OUT_OF_STOCK"
+                elif quantity <= 10:
+                    status_name = "LOW"
+                else:
+                    status_name = "IN_STOCK"
+
+            status_obj, _ = ProductStatus.objects.get_or_create(
+                status_name=status_name
+            )
+
             # 3. Create Product Variant
             product = Product.objects.create(
                 name=name,
@@ -126,7 +139,7 @@ class ProductViewSet(viewsets.ModelViewSet):
                 profile=profile_obj,
                 fixed_price=variant.get("fixed_price", 0),
                 discounted_price=variant.get("discounted_price", 0),
-                quantity=variant.get("quantity", 0),
+                quantity=quantity,
                 is_trending=False
             )
 
@@ -342,3 +355,116 @@ class ProductCategoryViewSet(viewsets.ModelViewSet):
         # Soft delete execution
         client_ip = get_client_ip(self.request)
         instance.soft_delete(ip=client_ip)    
+
+
+# ===========================================================================
+# 10. SUPERFAST PUBLIC CATALOG VIEW
+# ===========================================================================
+class PublicProductListView(ListAPIView):
+    """
+    Public API for browsing products. 
+    - Combines multiple filters (Category, Status, Size, Weight, Price, Search).
+    - Always orders by Trending first.
+    - Excludes PROCESSING, REVIEW, and REJECTED products.
+    """
+    serializer_class = PublicProductFlatSerializer
+    permission_classes = [AllowAny]
+    pagination_class = ProductPagination
+
+    def get_queryset(self):
+        # 1. Base Queryset (Optimized with Joins)
+        # Excludes soft deleted and hidden statuses by default
+        qs = Product.objects.filter(
+            is_deleted=False
+        ).exclude(
+            status__status_name__in=['PROCESSING', 'REVIEW', 'REJECTED']
+        ).select_related(
+            'category', 'status', 'size', 'profile'
+        ).prefetch_related(
+            'media', 'tags'
+        )
+
+        # 2. Extract Query Params
+        params = self.request.query_params
+        q = params.get('q')
+        category = params.get('category')
+        status_param = params.get('status')
+        size = params.get('size')
+        min_weight = params.get('min_weight')
+        max_weight = params.get('max_weight')
+        min_price = params.get('min_price')
+        max_price = params.get('max_price')
+        sort = params.get('sort')
+
+        # 3. Dynamic Filter Stacking (All Combinable)
+        if q:
+            qs = qs.filter(
+                Q(name__icontains=q) |
+                Q(description__icontains=q) |
+                Q(tags__tag_name__icontains=q) |
+                Q(category__name__icontains=q)
+            ).distinct() # Distinct required when joining M2M tags to prevent duplicate rows
+
+        if category:
+            qs = qs.filter(category__name__iexact=category)
+            
+        if status_param:
+            qs = qs.filter(status__status_name__iexact=status_param)
+            
+        if size:
+            qs = qs.filter(size__size_name__iexact=size)
+            
+        if min_weight:
+            qs = qs.filter(size__weight__gte=min_weight)
+            
+        if max_weight:
+            qs = qs.filter(size__weight__lte=max_weight)
+            
+        if min_price:
+            qs = qs.filter(discounted_price__gte=min_price)
+            
+        if max_price:
+            qs = qs.filter(discounted_price__lte=max_price)
+
+        # 4. Live DB Annotations
+        # Calculate absolute discount at the database level for max-discount sorting
+        qs = qs.annotate(
+            discount_amount=ExpressionWrapper(
+                F('fixed_price') - F('discounted_price'),
+                output_field=DecimalField(max_digits=12, decimal_places=2)
+            )
+        )
+
+        # 5. Sorting Engine (ALWAYS forces Trending to the very top)
+        ordering = ['-is_trending']
+
+        if sort:
+            # Safe mapping prevents SQL injection via URL parameters
+            sort_map = {
+                'price_asc': 'discounted_price',
+                'price_desc': '-discounted_price',
+                'discount_max': '-discount_amount',
+                'calories_asc': 'profile__calories',
+                'calories_desc': '-profile__calories',
+                'protein_asc': 'profile__protein',
+                'protein_desc': '-profile__protein',
+                'carbs_asc': 'profile__carbohydrates',
+                'carbs_desc': '-profile__carbohydrates',
+                'fibre_asc': 'profile__fibre',
+                'fibre_desc': '-profile__fibre',
+                'fats_asc': 'profile__fats',
+                'fats_desc': '-profile__fats',
+            }
+            
+            # Allow stacking sort commands (e.g., sort=discount_max,price_asc)
+            sort_keys = sort.split(',')
+            for key in sort_keys:
+                key = key.strip()
+                if key in sort_map:
+                    ordering.append(sort_map[key])
+        else:
+            # Default fallback order if no sort is specified
+            ordering.append('-created_at')
+
+        # Apply final combined ordering
+        return qs.order_by(*ordering)        

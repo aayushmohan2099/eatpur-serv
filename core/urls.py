@@ -17,7 +17,9 @@ urlpatterns = [
     path('api/admin/', include('user.urls')),
     path('api/', include('messaging.urls')),
     path('api/dashboard/', HomepageDashboardView.as_view(), name='homepage-dashboard'),
-
+    path('api/shop/', include('shop.urls')),
+    path('api/logistics/', include('logistics.api.urls')),
+    
     path(
         'feedback/',
         RedirectView.as_view(

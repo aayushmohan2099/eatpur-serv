@@ -130,6 +130,8 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
         max_length=20, unique=True, db_index=True, verbose_name="Mobile Number"
     )
 
+    age = models.PositiveIntegerField(null=True, blank=True, verbose_name="Age")
+
     # --- Profile ---
     avatar = models.ImageField(
         upload_to="avatars/%Y/%m/", null=True, blank=True, verbose_name="Avatar"

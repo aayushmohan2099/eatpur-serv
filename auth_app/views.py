@@ -22,7 +22,7 @@ LoginView additionally uses DB-backed LoginAttempt (checked inside LoginSerializ
 """
 
 import logging
-
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import permissions, status
@@ -39,13 +39,10 @@ from auth_app.models import CaptchaChallenge
 from core.mixins import get_client_ip
 from security.jwt_custom import get_tokens_for_user
 
-from .serializers import (
-    CaptchaResponseSerializer,
-    LoginSerializer,
-    LogoutSerializer,
-    RegisterSerializer,
-    UserProfileSerializer,
-)
+from .serializers import *
+
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
 
 logger = logging.getLogger("auth_app")
 CustomUser = get_user_model()
@@ -314,6 +311,7 @@ class RegisterView(APIView):
         "username":        "john_doe",
         "email":           "john@example.com",
         "mobile":          "9876543210",
+        "age":             "25",
         "password":        "SecurePass1!",
         "password_confirm":"SecurePass1!",
         "captcha_id":      "<UUID>",
@@ -373,3 +371,74 @@ class MeView(APIView):
             UserProfileSerializer(request.user).data,
             status=status.HTTP_200_OK,
         )
+
+# ===========================================================================
+# SocialAuthView — POST /auth/social/
+# ===========================================================================
+
+class SocialAuthView(APIView):
+    """
+    POST /auth/social/
+    
+    Body
+    ----
+    {
+        "provider": "google",
+        "token": "<OAUTH_TOKEN_FROM_FRONTEND>"
+    }
+    """
+    permission_classes = [permissions.AllowAny]
+    throttle_classes = [LoginThrottle]
+
+    def post(self, request):
+        serializer = SocialAuthSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({"errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+        provider = serializer.validated_data["provider"]
+        token = serializer.validated_data["token"]
+        email = None
+
+        # 1. VERIFY GOOGLE TOKEN
+        if provider == "google":
+            try:
+                # Using the exact Google Client ID you generated
+                client_id = getattr(settings, "GOOGLE_CLIENT_ID", "258516770853-4an5a6rcv85kd2bt25uo2o4onlhikctq.apps.googleusercontent.com")
+                
+                idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), client_id)
+                email = idinfo.get("email")
+            except ValueError:
+                return Response({"error": "Invalid or expired Google token."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not email:
+            return Response({"error": "Could not securely extract email from provider."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 2. CHECK IF USER EXISTS IN DATABASE
+        try:
+            user = CustomUser.objects.select_related("role").get(email=email)
+            
+            if not user.is_active:
+                return Response(
+                    {"non_field_errors": "This account has been deactivated. Please contact support."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # --- USER EXISTS: LOG THEM IN IMMEDIATELY ---
+            session = _build_session(user, request)
+            tokens = get_tokens_for_user(user, session_id=session.pk)
+
+            logger.info("Social Login success: user_id=%s session_id=%s ip=%s provider=%s", user.pk, session.pk, get_client_ip(request), provider)
+
+            return Response({
+                **tokens,
+                "token_type": "Bearer",
+                "user": UserProfileSerializer(user).data,
+            }, status=status.HTTP_200_OK)
+
+        except CustomUser.DoesNotExist:
+            # --- USER DOES NOT EXIST: REQUIRE REGISTRATION ---
+            # We return a 202 Accepted flag with the verified email so the frontend can lock it in.
+            return Response({
+                "action": "requires_registration",
+                "email": email
+            }, status=status.HTTP_202_ACCEPTED)

@@ -21,16 +21,10 @@ Include in root urls.py:
 
 from django.urls import path
 
-from .views import (
-    CaptchaView,
-    LoginView,
-    LogoutView,
-    MeView,
-    RegisterView,
-    TokenRefreshView,
-)
+from .views import *
 
 urlpatterns = [
+    path("social/",   SocialAuthView.as_view(),    name="auth-social"),
     path("login/",    LoginView.as_view(),         name="auth-login"),
     path("logout/",   LogoutView.as_view(),        name="auth-logout"),
     path("refresh/",  TokenRefreshView.as_view(),  name="auth-refresh"),

@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     "inventory",
     "messaging",
     "shop",
+    "logistics",
 ]
 
 AUTH_USER_MODEL = "user.CustomUser"
@@ -118,7 +119,7 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 STATICFILES_DIRS = [
-    BASE_DIR / "core" / "templates" / "static",
+    BASE_DIR / "core" / "templates",
 ]
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
@@ -228,3 +229,19 @@ LOGGING = {
     },
     "root": {"handlers": ["console"], "level": "WARNING"},
 }
+
+# ---------------------------------------------------------------------------
+# RazorPay Config
+# ---------------------------------------------------------------------------
+RAZORPAY_KEY_ID  = "rzp_live_TNxRN8Yzjfgsgl"
+RAZORPAY_KEY_SECRET = "4ZYycnT9cXMyk4gTBjGBQr22"
+RAZORPAY_WEBHOOK_SECRET = "TECHNO@123"
+
+
+# ---------------------------------------------------------------------------
+# EKart Config
+# ---------------------------------------------------------------------------
+EKART_BASE_URL = os.environ.get("EKART_BASE_URL", "https://api.ekartlogistics.in")
+EKART_CLIENT_ID = os.environ.get("EKART_CLIENT_ID", "your_client_id")
+EKART_USERNAME = os.environ.get("EKART_USERNAME", "your_username")
+EKART_PASSWORD = os.environ.get("EKART_PASSWORD", "your_password")

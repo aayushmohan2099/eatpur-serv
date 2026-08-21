@@ -9,4 +9,6 @@ router.register(r'categories', ProductCategoryViewSet, basename='category')
 
 urlpatterns = [
     path('', include(router.urls)),
+    path('public-catalog/', PublicProductListView.as_view(), name='public-product-catalog'),    
 ]
+

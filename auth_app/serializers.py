@@ -203,6 +203,7 @@ class RegisterSerializer(serializers.ModelSerializer):
             "username",
             "email",
             "mobile",
+            "age",
             "password",
             "password_confirm",
             "captcha_id",
@@ -304,6 +305,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "urid",
             "username",
             "email",
+            "age",
             "mobile",
             "avatar",
             "role_name",
@@ -312,3 +314,14 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = fields
+
+# ===========================================================================
+# SocialAuthSerializer
+# ===========================================================================
+
+class SocialAuthSerializer(serializers.Serializer):
+    """
+    Accepts the OAuth token from the frontend to verify with Google/Facebook.
+    """
+    provider = serializers.ChoiceField(choices=["google", "facebook"])
+    token = serializers.CharField(help_text="The OAuth token from the provider.")

@@ -38,7 +38,7 @@ import logging
 from typing import Any
 
 from django.conf import settings
-
+from django.core.serializers.json import DjangoJSONEncoder
 logger = logging.getLogger("security")
 
 
@@ -73,7 +73,12 @@ def encrypt_payload(data: Any) -> str:
     EncryptionError if serialisation fails.
     """
     try:
-        json_str = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+        json_str = json.dumps(
+            data, 
+            ensure_ascii=False, 
+            separators=(",", ":"), 
+            cls=DjangoJSONEncoder
+        )
     except (TypeError, ValueError) as exc:
         raise EncryptionError(f"Cannot serialise response payload: {exc}") from exc
 
