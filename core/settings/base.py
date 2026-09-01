@@ -241,7 +241,8 @@ RAZORPAY_WEBHOOK_SECRET = "TECHNO@123"
 # ---------------------------------------------------------------------------
 # EKart Config
 # ---------------------------------------------------------------------------
-EKART_BASE_URL = os.environ.get("EKART_BASE_URL", "https://api.ekartlogistics.in")
-EKART_CLIENT_ID = os.environ.get("EKART_CLIENT_ID", "your_client_id")
-EKART_USERNAME = os.environ.get("EKART_USERNAME", "your_username")
-EKART_PASSWORD = os.environ.get("EKART_PASSWORD", "your_password")
+EKART_BASE_URL = os.environ.get("EKART_BASE_URL", "https://app.elite.ekartlogistics.in")
+EKART_CLIENT_ID = os.environ.get("EKART_CLIENT_ID", "EKART_6a59cf1bb3df1df53b162113")
+EKART_USERNAME = os.environ.get("EKART_USERNAME", "eatpurnaturals@gmail.com")
+EKART_PASSWORD = os.environ.get("EKART_PASSWORD", "lovelesh@123")
+EKART_WEBHOOK_SECRET = "EatPurEkartSecret2026!"

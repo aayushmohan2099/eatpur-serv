@@ -3,11 +3,14 @@ logistics/utils/ekart_client.py
 ===============================
 Base HTTP Client for Ekart API.
 Handles token caching, automatic Bearer injection, and audit logging.
+Includes WAF bypass headers and connection retries.
 """
 
 import time
 import requests
 import logging
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from django.conf import settings
 from django.utils import timezone
 from rest_framework.exceptions import APIException
@@ -28,10 +31,21 @@ class EkartClient:
         self.client_id = getattr(settings, "EKART_CLIENT_ID", "")
         self.username = getattr(settings, "EKART_USERNAME", "")
         self.password = getattr(settings, "EKART_PASSWORD", "")
+        
+        # 1. Setup session with Retries to handle random SSL drops
+        self.session = requests.Session()
+        retries = Retry(total=3, backoff_factor=1, status_forcelist=[ 502, 503, 504 ])
+        self.session.mount('https://', HTTPAdapter(max_retries=retries))
+
+        # 2. Add Standard Browser Headers to bypass WAF (Fixes SSLEOFError)
+        self.default_headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+        }
 
     def _log_request(self, method: str, endpoint: str, req_payload: dict, res_payload: dict, status_code: int, duration_ms: int):
         """Privately log the request to the DB."""
-        # Sanitize passwords from logs if auth endpoint
         safe_req = req_payload.copy() if req_payload else {}
         if "password" in safe_req:
             safe_req["password"] = "********"
@@ -65,7 +79,8 @@ class EkartClient:
 
         start_time = time.time()
         try:
-            response = requests.post(url, json=payload, timeout=10)
+            # Use self.session and pass default_headers
+            response = self.session.post(url, json=payload, headers=self.default_headers, timeout=15)
             duration_ms = int((time.time() - start_time) * 1000)
             res_data = response.json() if response.text else {}
             
@@ -73,13 +88,11 @@ class EkartClient:
             
             if response.status_code != 200:
                 logger.error(f"Ekart Auth Failed: {res_data}")
-                raise EkartAPIException("Failed to authenticate with Ekart.")
+                raise EkartAPIException("Failed to authenticate with Ekart. Check credentials or IP whitelist.")
 
-            # Calculate precise expiration
             expires_in_seconds = res_data.get("expires_in", 86400)
             expires_at = timezone.now() + timezone.timedelta(seconds=expires_in_seconds)
 
-            # Save to DB
             new_token = EkartAuthToken.objects.create(
                 access_token=res_data.get("access_token"),
                 token_type=res_data.get("token_type", "Bearer"),
@@ -91,6 +104,7 @@ class EkartClient:
         except requests.RequestException as e:
             duration_ms = int((time.time() - start_time) * 1000)
             self._log_request("POST", endpoint, payload, {"error": str(e)}, 500, duration_ms)
+            logger.error(f"Ekart SSL/Network Error: {str(e)}")
             raise EkartAPIException(f"Network error while connecting to Ekart: {str(e)}")
 
     def request(self, method: str, endpoint: str, payload: dict = None, params: dict = None) -> dict:
@@ -98,28 +112,28 @@ class EkartClient:
         Generic request executor. Automatically injects the Bearer token.
         """
         token = self.get_valid_token()
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json"
-        }
+        
+        # Merge Bearer token with our WAF bypass headers
+        headers = self.default_headers.copy()
+        headers["Authorization"] = f"Bearer {token}"
+        
         url = f"{self.base_url}{endpoint}"
 
         start_time = time.time()
         try:
             if method.upper() == "GET":
-                response = requests.get(url, headers=headers, params=params, timeout=15)
+                response = self.session.get(url, headers=headers, params=params, timeout=15)
             elif method.upper() == "POST":
-                response = requests.post(url, headers=headers, json=payload, params=params, timeout=15)
+                response = self.session.post(url, headers=headers, json=payload, params=params, timeout=15)
             elif method.upper() == "PUT":
-                response = requests.put(url, headers=headers, json=payload, params=params, timeout=15)
+                response = self.session.put(url, headers=headers, json=payload, params=params, timeout=15)
             elif method.upper() == "DELETE":
-                response = requests.delete(url, headers=headers, params=params, timeout=15)
+                response = self.session.delete(url, headers=headers, params=params, timeout=15)
             else:
                 raise ValueError("Unsupported HTTP Method")
 
             duration_ms = int((time.time() - start_time) * 1000)
             
-            # Handle empty responses (like 204 No Content) gracefully
             try:
                 res_data = response.json()
             except ValueError:
@@ -127,7 +141,6 @@ class EkartClient:
 
             self._log_request(method, endpoint, payload or params, res_data, response.status_code, duration_ms)
 
-            # Let the specific views handle non-200 logic, but return the dict
             return {
                 "status_code": response.status_code,
                 "data": res_data

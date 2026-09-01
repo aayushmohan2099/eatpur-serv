@@ -230,6 +230,10 @@ class Product(SoftDeleteMixin):
     )
     description = models.TextField(blank=True, verbose_name="Description")
 
+    ingredients = models.TextField(blank=True, verbose_name="Ingredients")
+    cooking_instructions = models.TextField(blank=True, verbose_name="Instructions for Cooking")
+    highlights = models.TextField(blank=True, verbose_name="Product Highlights")
+
     is_trending = models.BooleanField(default=False, db_index=True, verbose_name="Is Trending")
 
     category = models.ForeignKey(
@@ -389,3 +393,110 @@ class ProductTag(SoftDeleteMixin):
 
     def __str__(self):
         return f"{self.tag_name} → {self.product.pid}"
+
+# ===========================================================================
+# ProductLike — Public / Anonymous
+# ===========================================================================
+
+class ProductLike(SoftDeleteMixin):
+    """
+    Tracks likes on a product.
+    Can be liked by authenticated users OR anonymous users (tracked via IP).
+    """
+    product = models.ForeignKey(
+        Product, 
+        on_delete=models.CASCADE, 
+        related_name="likes", 
+        db_index=True
+    )
+    user = models.ForeignKey(
+        "user.CustomUser", 
+        on_delete=models.CASCADE, 
+        null=True, 
+        blank=True, 
+        db_index=True,
+        help_text="Null if liked by an anonymous user."
+    )
+    ip_address = models.GenericIPAddressField(db_index=True)
+
+    class Meta:
+        db_table = "product_like"
+        verbose_name = "Product Like"
+        verbose_name_plural = "Product Likes"
+        indexes = [
+            models.Index(fields=["product", "ip_address"]),
+            models.Index(fields=["product", "user"]),
+        ]
+
+    def __str__(self):
+        return f"Like on {self.product.pid} by {self.user.username if self.user else self.ip_address}"
+
+
+# ===========================================================================
+# ProductComment — Authenticated Reviews
+# ===========================================================================
+
+class ProductComment(SoftDeleteMixin):
+    """
+    User reviews/comments on a product. Strictly for authenticated users.
+    """
+    product = models.ForeignKey(
+        Product, 
+        on_delete=models.CASCADE, 
+        related_name="comments", 
+        db_index=True
+    )
+    user = models.ForeignKey(
+        "user.CustomUser", 
+        on_delete=models.CASCADE, 
+        related_name="product_comments",
+        db_index=True
+    )
+    rating = models.PositiveSmallIntegerField(
+        null=True, blank=True, 
+        help_text="1 to 5 star rating (Optional)"
+    )
+    content = models.TextField(verbose_name="Review Content")
+    
+    is_approved = models.BooleanField(
+        default=True, 
+        db_index=True, 
+        help_text="Set to False if you want manual moderation."
+    )
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+
+    class Meta:
+        db_table = "product_comment"
+        verbose_name = "Product Comment"
+        verbose_name_plural = "Product Comments"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["product", "is_approved"]),
+        ]
+
+    def __str__(self):
+        return f"Comment by {self.user.username} on {self.product.pid}"
+
+
+# ===========================================================================
+# ProductCommentImage — Max 3 per comment
+# ===========================================================================
+
+class ProductCommentImage(SoftDeleteMixin):
+    """
+    Images attached to a ProductComment. Enforced max 3 at API level.
+    """
+    comment = models.ForeignKey(
+        ProductComment, 
+        on_delete=models.CASCADE, 
+        related_name="images"
+    )
+    image = models.ImageField(upload_to="products/reviews/%Y/%m/")
+
+    class Meta:
+        db_table = "product_comment_image"
+        verbose_name = "Product Comment Image"
+        verbose_name_plural = "Product Comment Images"
+
+    def __str__(self):
+        return f"Image for Comment #{self.comment_id}"

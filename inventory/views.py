@@ -1,5 +1,6 @@
 import json
-from rest_framework import viewsets, status
+from rest_framework.views import APIView
+from rest_framework import viewsets, status, permissions
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.pagination import PageNumberPagination
@@ -12,6 +13,7 @@ from rest_framework.permissions import AllowAny
 from .models import *
 from .serializers import *
 from rest_framework.decorators import action
+from django.shortcuts import get_object_or_404
 
 # Helper to capture IP for soft_delete mixins
 def get_client_ip(request):
@@ -72,6 +74,10 @@ class ProductViewSet(viewsets.ModelViewSet):
         # Extract core fields
         name = request.data.get("name")
         description = request.data.get("description", "")
+        ingredients = request.data.get("ingredients", "")
+        cooking_instructions = request.data.get("cooking_instructions", "")
+        highlights = request.data.get("highlights", "")
+
         category_id = request.data.get("category_id")
 
         try:
@@ -133,6 +139,9 @@ class ProductViewSet(viewsets.ModelViewSet):
             product = Product.objects.create(
                 name=name,
                 description=description,
+                ingredients=ingredients,
+                cooking_instructions=cooking_instructions,
+                highlights=highlights,
                 category=category_obj,
                 status=status_obj,
                 size=size_obj,
@@ -173,6 +182,9 @@ class ProductViewSet(viewsets.ModelViewSet):
         # Update core fields
         if "name" in request.data: instance.name = request.data["name"]
         if "description" in request.data: instance.description = request.data["description"]
+        if "ingredients" in request.data: instance.ingredients = request.data["ingredients"]
+        if "cooking_instructions" in request.data: instance.cooking_instructions = request.data["cooking_instructions"]
+        if "highlights" in request.data: instance.highlights = request.data["highlights"]
         if "category_id" in request.data: instance.category_id = request.data["category_id"]
         if "fixed_price" in request.data: instance.fixed_price = request.data["fixed_price"]
         if "discounted_price" in request.data: instance.discounted_price = request.data["discounted_price"]
@@ -468,3 +480,90 @@ class PublicProductListView(ListAPIView):
 
         # Apply final combined ordering
         return qs.order_by(*ordering)        
+
+# ---------------------------------------------------------------------------
+# PUBLIC: Toggle Like
+# ---------------------------------------------------------------------------
+class ProductLikeToggleView(APIView):
+    """
+    POST /api/inventory/products/<pid>/like/
+    
+    Toggles a like on a product.
+    If authenticated: Uses user ID.
+    If anonymous: Uses IP Address.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request, pid):
+        product = get_object_or_404(Product, pid=pid, is_deleted=False)
+        ip_address = get_client_ip(request) or "0.0.0.0"
+        
+        user = request.user if request.user.is_authenticated else None
+
+        # Build filter based on auth status
+        if user:
+            like_query = ProductLike.objects.filter(product=product, user=user, is_deleted=False)
+        else:
+            like_query = ProductLike.objects.filter(product=product, user__isnull=True, ip_address=ip_address, is_deleted=False)
+
+        liked = False
+        if like_query.exists():
+            # Unlike: Soft delete the existing like
+            like_instance = like_query.first()
+            like_instance.is_deleted = True
+            like_instance.save(update_fields=["is_deleted", "updated_at"])
+        else:
+            # Like: Create new record
+            ProductLike.objects.create(product=product, user=user, ip_address=ip_address)
+            liked = True
+
+        # Count total active likes
+        total_likes = ProductLike.objects.filter(product=product, is_deleted=False).count()
+
+        return Response(
+            {"liked": liked, "total_likes": total_likes}, 
+            status=status.HTTP_200_OK
+        )
+
+
+# ---------------------------------------------------------------------------
+# AUTHENTICATED: One-Shot Comment & Images
+# ---------------------------------------------------------------------------
+class ProductCommentCreateView(APIView):
+    """
+    POST /api/inventory/products/<pid>/comments/
+    
+    Creates a review. Accepts Multipart Form Data.
+    Frontend must send fields: 'content', 'rating' (optional), and up to 3 'images' files.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser] # CRITICAL for image uploads
+
+    def post(self, request, pid):
+        product = get_object_or_404(Product, pid=pid, is_deleted=False)
+        
+        # Inject user, product, and IP into the serializer context/data
+        serializer = ProductCommentSerializer(data=request.data)
+        
+        if serializer.is_valid():
+            serializer.save(
+                product=product, 
+                user=request.user, 
+                ip_address=get_client_ip(request)
+            )
+            return Response(
+                {"message": "Review submitted successfully.", "review": serializer.data}, 
+                status=status.HTTP_201_CREATED
+            )
+            
+        return Response({"errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+    def get(self, request, pid):
+        """Optional: Fetch all approved comments for a product."""
+        product = get_object_or_404(Product, pid=pid, is_deleted=False)
+        comments = ProductComment.objects.filter(
+            product=product, is_approved=True, is_deleted=False
+        ).select_related('user').prefetch_related('images')
+        
+        serializer = ProductCommentSerializer(comments, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)    

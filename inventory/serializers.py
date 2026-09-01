@@ -1,8 +1,5 @@
 from rest_framework import serializers
-from .models import (
-    ProductCategory, ProductStatus, ProductSize, ProductProfile,
-    Product, ProductMedia, ProductTag
-)
+from .models import *
 
 class ProductCategorySerializer(serializers.ModelSerializer):
     class Meta:
@@ -51,7 +48,8 @@ class ProductListSerializer(serializers.ModelSerializer):
         fields = [
             "id", "pid", "name", "category_name", "status_name", 
             "size_display", "fixed_price", "discounted_price", 
-            "quantity", "is_trending", "cover_image"
+            "quantity", "is_trending", "cover_image", "ingredients", 
+            "cooking_instructions", "highlights"
         ]
 
     def get_size_display(self, obj):
@@ -81,7 +79,8 @@ class ProductDetailSerializer(serializers.ModelSerializer):
             "id", "pid", "name", "description", "category", "status", 
             "size", "profile", "fixed_price", "discounted_price", 
             "quantity", "is_trending", "media", "tags", 
-            "created_at", "updated_at"
+            "created_at", "updated_at", "ingredients", 
+            "cooking_instructions", "highlights"
         ]
 
 # ===========================================================================
@@ -116,7 +115,8 @@ class PublicProductFlatSerializer(serializers.ModelSerializer):
             'id', 'pid', 'name', 'description', 'fixed_price', 'discounted_price', 
             'quantity', 'is_trending', 'category_name', 'status_name', 
             'size_name', 'weight', 'unit', 'calories', 'protein', 'carbohydrates', 
-            'fibre', 'fats', 'tags', 'cover_image', 'discount_amount', 'discount_percentage'
+            'fibre', 'fats', 'tags', 'cover_image', 'discount_amount', 'discount_percentage', 'ingredients', 
+            'cooking_instructions', 'highlights'
         ]
 
     def get_tags(self, obj):
@@ -140,3 +140,66 @@ class PublicProductFlatSerializer(serializers.ModelSerializer):
             diff = obj.fixed_price - obj.discounted_price
             return round((diff / obj.fixed_price) * 100, 1)
         return 0        
+
+# ---------------------------------------------------------------------------
+# LIKE SERIALIZER
+# ---------------------------------------------------------------------------
+class ProductLikeResponseSerializer(serializers.Serializer):
+    """Returns the updated state after a like toggle."""
+    liked = serializers.BooleanField()
+    total_likes = serializers.IntegerField()
+
+
+# ---------------------------------------------------------------------------
+# COMMENT SERIALIZERS
+# ---------------------------------------------------------------------------
+class ProductCommentImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductCommentImage
+        fields = ["id", "image"]
+
+class ProductCommentSerializer(serializers.ModelSerializer):
+    """
+    One-Shot Serializer for writing a comment + up to 3 images.
+    """
+    images = serializers.ListField(
+        child=serializers.ImageField(allow_empty_file=False, use_url=False),
+        write_only=True,
+        required=False,
+        max_length=3,
+        help_text="Upload up to 3 images. Frontend should send these as multiple 'images' keys in FormData."
+    )
+    
+    # Read-only nested representation
+    attached_images = ProductCommentImageSerializer(source="images", many=True, read_only=True)
+    username = serializers.CharField(source="user.username", read_only=True)
+    avatar = serializers.ImageField(source="user.avatar", read_only=True)
+
+    class Meta:
+        model = ProductComment
+        fields = [
+            "id", "username", "avatar", "rating", "content", 
+            "images", "attached_images", "created_at"
+        ]
+        read_only_fields = ["id", "created_at"]
+
+    def validate_rating(self, value):
+        if value is not None and not (1 <= value <= 5):
+            raise serializers.ValidationError("Rating must be between 1 and 5.")
+        return value
+
+    def create(self, validated_data):
+        images_data = validated_data.pop("images", [])
+        
+        # 1. Create the comment
+        comment = ProductComment.objects.create(**validated_data)
+        
+        # 2. Create the images attached to the comment
+        image_instances = []
+        for img in images_data:
+            image_instances.append(ProductCommentImage(comment=comment, image=img))
+        
+        if image_instances:
+            ProductCommentImage.objects.bulk_create(image_instances)
+            
+        return comment    

@@ -10,5 +10,7 @@ router.register(r'categories', ProductCategoryViewSet, basename='category')
 urlpatterns = [
     path('', include(router.urls)),
     path('public-catalog/', PublicProductListView.as_view(), name='public-product-catalog'),    
+    path('products/<str:pid>/like/', ProductLikeToggleView.as_view(), name='product-like-toggle'),
+    path('products/<str:pid>/comments/', ProductCommentCreateView.as_view(), name='product-comments'),
 ]
 
