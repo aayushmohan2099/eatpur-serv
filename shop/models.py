@@ -144,6 +144,21 @@ class SaleOrder(SoftDeleteMixin):
     * session: the request session at the time of order placement.
     * total_amount: final amount after discount, stored for financial record integrity.
     """
+    PAYMENT_STATUS_CHOICES = [
+        ("PENDING", "Pending"),
+        ("PAID", "Paid"),
+        ("FAILED", "Failed"),
+    ]
+    FULFILLMENT_STATUS_CHOICES = [
+        ("UNFULFILLED", "Unfulfilled (Queued)"),
+        ("PROCESSING", "Processing via Ekart"),
+        ("SHIPPED", "Shipped"),
+        ("DELIVERED", "Delivered"),
+        ("CANCELLED", "Cancelled"),
+    ]
+
+    payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default="PENDING", db_index=True)
+    fulfillment_status = models.CharField(max_length=20, choices=FULFILLMENT_STATUS_CHOICES, default="UNFULFILLED", db_index=True)
 
     order_date = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name="Order Date")
     total_amount = models.DecimalField(
@@ -170,6 +185,17 @@ class SaleOrder(SoftDeleteMixin):
         db_index=True,
         verbose_name="Session",
     )
+
+    consignee_name = models.CharField(max_length=255, default="", verbose_name="Consignee Name")
+    consignee_phone = models.CharField(max_length=20, default="", verbose_name="Consignee Phone")
+    consignee_alternate_phone = models.CharField(max_length=20, default="", verbose_name="Consignee Alternate Phone")
+    drop_location = models.CharField(max_length=500, default="", verbose_name="Drop Location (Address, City, State, Pincode)")
+    drop_city = models.CharField(max_length=100, default="", verbose_name="Drop City")
+    drop_state = models.CharField(max_length=100, default="", verbose_name="Drop State")
+    drop_pincode = models.CharField(max_length=10, default="", verbose_name="Drop Pincode")
+    preferred_dispatch_date = models.DateField(null=True, blank=True, verbose_name="Preferred Dispatch Date")
+    service_type = models.CharField(max_length=20, choices=[("SURFACE", "Surface"), ("EXPRESS", "Express")], default="SURFACE", verbose_name="Service Type")
+    pickup_location_alias = models.CharField(max_length=100, default="", verbose_name="Pickup Location Alias")
 
     class Meta:
         db_table = "sale_order"

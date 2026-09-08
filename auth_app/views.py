@@ -25,8 +25,10 @@ import logging
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.utils import timezone
-from rest_framework import permissions, status
+from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
+from rest_framework.parsers import MultiPartParser, FormParser
+from django.db import transaction
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
@@ -35,7 +37,7 @@ from rest_framework_simplejwt.views import TokenRefreshView as SimpleJWTRefreshV
 
 from security.captcha_image import generate_captcha_image
 
-from auth_app.models import CaptchaChallenge
+from auth_app.models import *
 from core.mixins import get_client_ip
 from security.jwt_custom import get_tokens_for_user
 
@@ -442,3 +444,50 @@ class SocialAuthView(APIView):
                 "action": "requires_registration",
                 "email": email
             }, status=status.HTTP_202_ACCEPTED)
+
+# ===========================================================================
+# FrontPageBannerViewSet — GET /banners/
+# ===========================================================================
+
+class FrontPageBannerViewSet(viewsets.ModelViewSet):
+    """
+    API for managing Front Page Slideshow Banners.
+    - GET: Publicly accessible (Filters to is_featured=True for non-admins automatically).
+    - POST/PUT/PATCH/DELETE: Requires Admin privileges.
+    """
+    serializer_class = FrontPageBannerSerializer
+    parser_classes = [MultiPartParser, FormParser]
+
+    def get_permissions(self):
+        """Allow public read access, but restrict writes to Admins."""
+        if self.action in ['list', 'retrieve']:
+            return [permissions.AllowAny()]
+        return [permissions.IsAdminUser()]
+
+    def get_queryset(self):
+        """
+        Admins see all banners (to manage drafts).
+        Public users only see featured banners.
+        """
+        qs = FrontPageBanner.objects.filter(is_deleted=False)
+        
+        # If public (unauthenticated or non-staff), strict filter
+        if not (self.request.user and self.request.user.is_staff):
+            qs = qs.filter(is_featured=True)
+            
+        return qs.order_by('display_order', '-created_at')
+
+    @transaction.atomic
+    def destroy(self, request, *args, **kwargs):
+        """
+        Executes a soft delete preserving the audit trail.
+        """
+        instance = self.get_object()
+        client_ip = get_client_ip(request)
+        
+        instance.soft_delete(ip=client_ip)
+        
+        return Response(
+            {"message": "Banner successfully deleted."}, 
+            status=status.HTTP_204_NO_CONTENT
+        )            

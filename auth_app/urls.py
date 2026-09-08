@@ -19,9 +19,12 @@ Include in root urls.py:
     ]
 """
 
-from django.urls import path
-
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
 from .views import *
+
+router = DefaultRouter()
+router.register(r'banners', FrontPageBannerViewSet, basename='front-page-banner')
 
 urlpatterns = [
     path("social/",   SocialAuthView.as_view(),    name="auth-social"),
@@ -30,4 +33,5 @@ urlpatterns = [
     path("refresh/",  TokenRefreshView.as_view(),  name="auth-refresh"),
     path("register/", RegisterView.as_view(),      name="auth-register"),
     path("me/",       MeView.as_view(),            name="auth-me"),
+    path('', include(router.urls)),
 ]

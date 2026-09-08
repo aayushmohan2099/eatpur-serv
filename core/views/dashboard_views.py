@@ -18,7 +18,8 @@ from inventory.models import (
     ProductStatus,
     ProductTag,
 )
-
+from auth_app.models import FrontPageBanner
+from auth_app.serializers import FrontPageBannerSerializer
 
 # ===========================================================================
 # Blog Serializers
@@ -175,9 +176,10 @@ class HomepageDashboardView(APIView):
     """
     GET /api/dashboard/
     Public endpoint. Returns:
-      - top_blogs        : top 3 published blogs ordered by like count (all nested)
+      - top_blogs            : top 3 published blogs ordered by like count (all nested)
       - trending_by_category : trending products (is_trending=True) grouped by category
-      - google_form_responses : recent Google Form responses
+      - google_form_responses: recent Google Form responses
+      - featured_banners     : active slideshow banners for the homepage
     """
 
     permission_classes = [AllowAny]
@@ -224,14 +226,30 @@ class HomepageDashboardView(APIView):
             )
             trending_by_category.append(
                 TrendingByCategorySerializer(
-                    {"category": category, "products": products_qs}
+                    {"category": category, "products": products_qs},
+                    context={"request": request}
                 ).data
             )
+
+        # ---------------------------------------------------------------
+        # Featured Banners for Slideshow
+        # ---------------------------------------------------------------
+        banners_qs = FrontPageBanner.objects.filter(
+            is_deleted=False, 
+            is_featured=True
+        ).order_by('display_order', '-created_at')
+        
+        banners_data = FrontPageBannerSerializer(banners_qs, many=True, context={"request": request}).data
 
         return Response(
             {
                 "top_blogs": top_blogs_data,
                 "trending_by_category": trending_by_category,
-                "google_form_responses": GoogleFormResponseSerializer(GoogleFormResponse.objects.all().order_by("-created_at"), many=True).data,
+                "google_form_responses": GoogleFormResponseSerializer(
+                    GoogleFormResponse.objects.all().order_by("-created_at"), 
+                    many=True, 
+                    context={"request": request}
+                ).data,
+                "featured_banners": banners_data,
             }
         )

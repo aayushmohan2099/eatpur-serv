@@ -10,6 +10,7 @@ from django.urls import path, include
 
 urlpatterns = [
     path("auth/", include("logistics.api.ekart_auth.urls")),
+    path("address/", include("logistics.api.address.urls")),
     path("serviceability/", include("logistics.api.serviceability.urls")),
     path("shipment/", include("logistics.api.shipment.urls")),
     path("tracking/", include("logistics.api.tracking.urls")),

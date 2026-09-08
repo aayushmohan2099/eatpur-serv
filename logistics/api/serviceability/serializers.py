@@ -52,6 +52,11 @@ class ShippingEstimateSerializer(serializers.Serializer):
         default=0.0, 
         help_text="Amount to collect if COD. Must be 0 for Prepaid."
     )
+    shippingDirection = serializers.ChoiceField(
+        choices=["FORWARD", "REVERSE"],
+        default="FORWARD",
+        help_text="Direction of shipment relative to the seller warehouse."
+    )
 
     def validate(self, attrs):
         if attrs.get("paymentType") == "COD" and attrs.get("codAmount", 0) <= 0:

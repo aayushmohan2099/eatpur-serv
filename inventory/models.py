@@ -500,3 +500,60 @@ class ProductCommentImage(SoftDeleteMixin):
 
     def __str__(self):
         return f"Image for Comment #{self.comment_id}"
+
+# ===========================================================================
+# ProductShippingDimension — Shipment/package dimensions
+# ===========================================================================
+
+class ProductShippingDimension(SoftDeleteMixin):
+    """
+    Stores the standard shipping/package dimensions for a product.
+
+    These values are intended for courier/shipping APIs such as Ekart.
+
+    Ekart requirements:
+        weight : integer, in grams
+        length : integer, in centimeters
+        height : integer, in centimeters
+        width  : integer, in centimeters
+    """
+
+    product = models.OneToOneField(
+        Product,
+        on_delete=models.CASCADE,
+        related_name="shipping_dimension",
+        db_index=True,
+        verbose_name="Product",
+    )
+
+    weight = models.PositiveIntegerField(
+        verbose_name="Package Weight (grams)",
+        help_text="Shipping package weight in grams.",
+    )
+
+    length = models.PositiveIntegerField(
+        verbose_name="Package Length (cm)",
+        help_text="Shipping package length in centimeters.",
+    )
+
+    height = models.PositiveIntegerField(
+        verbose_name="Package Height (cm)",
+        help_text="Shipping package height in centimeters.",
+    )
+
+    width = models.PositiveIntegerField(
+        verbose_name="Package Width (cm)",
+        help_text="Shipping package width in centimeters.",
+    )
+
+    class Meta:
+        db_table = "product_shipping_dimension"
+        verbose_name = "Product Shipping Dimension"
+        verbose_name_plural = "Product Shipping Dimensions"
+
+    def __str__(self):
+        return (
+            f"{self.product.pid} — "
+            f"{self.length} × {self.width} × {self.height} cm, "
+            f"{self.weight} g"
+        )        

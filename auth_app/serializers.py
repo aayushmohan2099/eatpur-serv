@@ -26,7 +26,7 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import serializers
 
-from auth_app.models import CaptchaChallenge, LoginAttempt
+from auth_app.models import *
 from user.models import Role
 from core.mixins import get_client_ip
 
@@ -325,3 +325,25 @@ class SocialAuthSerializer(serializers.Serializer):
     """
     provider = serializers.ChoiceField(choices=["google", "facebook"])
     token = serializers.CharField(help_text="The OAuth token from the provider.")
+
+# ===========================================================================
+# FrontPageBannerSerializer
+# ===========================================================================
+
+class FrontPageBannerSerializer(serializers.ModelSerializer):
+    """
+    Serializes FrontPageBanner for both public viewing and admin management.
+    """
+    class Meta:
+        model = FrontPageBanner
+        fields = [
+            'id', 
+            'title', 
+            'image', 
+            'is_featured', 
+            'display_order', 
+            'click_url', 
+            'created_at', 
+            'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']    

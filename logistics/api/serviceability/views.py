@@ -74,7 +74,8 @@ class ShippingEstimateView(APIView):
             "height": valid_data["height"],
             "width": valid_data["width"],
             "serviceType": valid_data["serviceType"],
-            "codAmount": valid_data["codAmount"]
+            "codAmount": valid_data["codAmount"],
+            "shippingDirection": valid_data["shippingDirection"]
         }
 
         try:

@@ -5,40 +5,24 @@ Serializers for Admin order fulfillment operations.
 """
 
 from rest_framework import serializers
-from logistics.models import EkartAddress
 
 class CreateShipmentSerializer(serializers.Serializer):
     """
-    Accepts the minimum required data from the Admin panel to dispatch a SaleOrder.
+    Validates the dispatch request. 
+    Reads core details from SaleOrder automatically, but allows 
+    optional priority overrides for shipping dimensions.
     """
-    sale_order_id = serializers.IntegerField(
-        help_text="The internal ID of the shop.SaleOrder to dispatch."
-    )
-    payment_mode = serializers.ChoiceField(
-        choices=["COD", "Prepaid", "Pickup"], 
-        default="Prepaid"
-    )
-    pickup_location_alias = serializers.CharField(
-        max_length=100, 
-        help_text="The alias of the registered EkartAddress for pickup."
-    )
-    service_type = serializers.ChoiceField(
-        choices=["SURFACE", "EXPRESS"], 
-        default="SURFACE"
-    )
-    weight = serializers.IntegerField(min_value=1, help_text="Weight in grams")
-    length = serializers.IntegerField(min_value=1, help_text="Length in cm")
-    height = serializers.IntegerField(min_value=1, help_text="Height in cm")
-    width = serializers.IntegerField(min_value=1, help_text="Width in cm")
+    sale_order_id = serializers.IntegerField(help_text="ID of the shop.SaleOrder")
     
-    # Optional advanced flags
-    delayed_dispatch = serializers.BooleanField(default=False)
-    obd_shipment = serializers.BooleanField(default=False)
-
-    def validate_pickup_location_alias(self, value):
-        if not EkartAddress.objects.filter(alias=value, is_deleted=False).exists():
-            raise serializers.ValidationError(f"Pickup location alias '{value}' does not exist in database.")
-        return value
+    # Optional Global Overrides for Dimensions
+    weight = serializers.IntegerField(required=False, allow_null=True)
+    length = serializers.IntegerField(required=False, allow_null=True)
+    height = serializers.IntegerField(required=False, allow_null=True)
+    width = serializers.IntegerField(required=False, allow_null=True)
+    
+    # Optional Item-wise Overrides
+    # Format: {"product_id_1": {"weight": 500, "length": 10}, "product_id_2": {...}}
+    items_dimensions = serializers.JSONField(required=False, allow_null=True)
 
 
 class TrackingIdListSerializer(serializers.Serializer):

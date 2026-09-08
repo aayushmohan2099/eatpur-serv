@@ -38,8 +38,9 @@ class ProductViewSet(viewsets.ModelViewSet):
     # -----------------------------------------------------------------------
 
     def get_queryset(self):
+        # Added 'shipping_dimension' to select_related for query optimization
         qs = Product.objects.filter(is_deleted=False).select_related(
-            "category", "status", "size", "profile"
+            "category", "status", "size", "profile", "shipping_dimension"
         ).prefetch_related("media", "tags")
 
         # 1. Filters
@@ -152,6 +153,17 @@ class ProductViewSet(viewsets.ModelViewSet):
                 is_trending=False
             )
 
+            # --- SURGICAL ADDITION: Create Shipping Dimensions ---
+            shipping_info = variant.get("shipping_dimension", {})
+            ProductShippingDimension.objects.create(
+                product=product,
+                weight=int(shipping_info.get("weight", 0)),
+                length=int(shipping_info.get("length", 0)),
+                height=int(shipping_info.get("height", 0)),
+                width=int(shipping_info.get("width", 0))
+            )
+            # ------------------------------------------------------
+
             # 4. Attach Tags (Shared across variants)
             for tag in tags_data:
                 ProductTag.objects.create(
@@ -201,6 +213,19 @@ class ProductViewSet(viewsets.ModelViewSet):
                     setattr(instance.profile, key, value)
                 instance.profile.save()
 
+        # --- SURGICAL ADDITION: Update Nested Shipping Dimensions ---
+        if "shipping_dimension" in request.data:
+            shipping_data = json.loads(request.data["shipping_dimension"])
+            shipping_dim, _ = ProductShippingDimension.objects.get_or_create(
+                product=instance, 
+                defaults={'weight': 0, 'length': 0, 'height': 0, 'width': 0}
+            )
+            for key, value in shipping_data.items():
+                if hasattr(shipping_dim, key):
+                    setattr(shipping_dim, key, int(value))
+            shipping_dim.save()
+        # ------------------------------------------------------------
+
         # Handle Nested Deletions (Tags and Media)
         delete_tag_ids = json.loads(request.data.get("delete_tag_ids", "[]"))
         if delete_tag_ids:
@@ -242,6 +267,11 @@ class ProductViewSet(viewsets.ModelViewSet):
         if instance.profile:
             instance.profile.soft_delete(ip=client_ip)
 
+        # --- SURGICAL ADDITION: Soft delete associated Shipping Dimension ---
+        if hasattr(instance, 'shipping_dimension') and instance.shipping_dimension:
+            instance.shipping_dimension.soft_delete(ip=client_ip)
+        # --------------------------------------------------------------------
+
         # Soft delete associated Media & Tags
         for media in instance.media.all():
             media.soft_delete(ip=client_ip)
@@ -272,13 +302,13 @@ class ProductViewSet(viewsets.ModelViewSet):
     def get_variants(self, request, pk=None):
         product = self.get_object()
         
-        # Variants share the exact same name and category
+        # Added 'shipping_dimension' to select_related
         variants = Product.objects.filter(
             name=product.name, 
             category=product.category, 
             is_deleted=False
         ).select_related(
-            "category", "status", "size", "profile"
+            "category", "status", "size", "profile", "shipping_dimension"
         ).prefetch_related("media", "tags")
 
         serializer = ProductDetailSerializer(variants, many=True, context={"request": request})
@@ -348,7 +378,7 @@ class ProductViewSet(viewsets.ModelViewSet):
             "message": "Quantity updated successfully.",
             "new_quantity": product.quantity,
             "new_status": status_name
-        }, status=status.HTTP_200_OK)    
+        }, status=status.HTTP_200_OK)
     
 # ---------------------------------------------------------------------------
 # 9. PRODUCT CATEGORY CRUD

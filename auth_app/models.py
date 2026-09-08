@@ -232,3 +232,47 @@ class LoginAttempt(models.Model):
         cutoff = timezone.now() - timezone.timedelta(minutes=cls.WINDOW_MINUTES)
         deleted, _ = cls.objects.filter(attempted_at__lt=cutoff).delete()
         return deleted
+
+# ===========================================================================
+# FrontPageBanner — Homepage Slideshow Images
+# ===========================================================================
+
+class FrontPageBanner(SoftDeleteMixin):
+    """
+    Manages promotional banners and slideshow images for the front page.
+    Inherits SoftDeleteMixin to maintain visual audit history.
+    """
+    title = models.CharField(
+        max_length=200, 
+        verbose_name="Banner Title / Alt Text"
+    )
+    image = models.ImageField(
+        upload_to="banners/frontpage/%Y/%m/", 
+        verbose_name="Banner Image"
+    )
+    is_featured = models.BooleanField(
+        default=False, 
+        db_index=True, 
+        verbose_name="Is Featured (Visible on Slideshow)"
+    )
+    display_order = models.PositiveIntegerField(
+        default=0, 
+        db_index=True, 
+        verbose_name="Display Order"
+    )
+    click_url = models.URLField(
+        blank=True, 
+        null=True, 
+        verbose_name="Click URL (Optional Destination)"
+    )
+
+    class Meta:
+        db_table = "front_page_banner"
+        verbose_name = "Front Page Banner"
+        verbose_name_plural = "Front Page Banners"
+        # Orders by explicit sequence first, then newest
+        ordering = ["display_order", "-created_at"] 
+
+    def __str__(self):
+        status = "Visible" if self.is_featured else "Hidden"
+        return f"[{status}] {self.title} (Order: {self.display_order})"

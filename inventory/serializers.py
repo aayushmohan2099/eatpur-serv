@@ -34,6 +34,11 @@ class ProductTagSerializer(serializers.ModelSerializer):
         model = ProductTag
         fields = ["id", "tag_name", "tag_description"]
 
+class ProductShippingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductShippingDimension
+        fields = ["id", "length", "width", "height", "weight"]
+
 # ---------------------------------------------------------------------------
 # Shallow List Serializer (Optimized for list views)
 # ---------------------------------------------------------------------------
@@ -72,6 +77,7 @@ class ProductDetailSerializer(serializers.ModelSerializer):
     profile = ProductProfileSerializer(read_only=True)
     media = ProductMediaSerializer(many=True, read_only=True)
     tags = ProductTagSerializer(many=True, read_only=True)
+    shipping_dimension = ProductShippingSerializer(read_only=True)
 
     class Meta:
         model = Product
@@ -80,7 +86,7 @@ class ProductDetailSerializer(serializers.ModelSerializer):
             "size", "profile", "fixed_price", "discounted_price", 
             "quantity", "is_trending", "media", "tags", 
             "created_at", "updated_at", "ingredients", 
-            "cooking_instructions", "highlights"
+            "cooking_instructions", "highlights", "shipping_dimension"
         ]
 
 # ===========================================================================
