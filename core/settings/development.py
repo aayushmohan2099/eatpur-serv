@@ -34,7 +34,7 @@ DATABASES = {
         "NAME": os.environ.get("DB_NAME", "eatpure_db"),       # noqa: F405
         "USER": os.environ.get("DB_USER", "eatUser"),          # noqa: F405
         "PASSWORD": os.environ.get("DB_PASSWORD", "lovelesh123"),  # noqa: F405
-        "HOST": os.environ.get("DB_HOST", "localhost"),        # noqa: F405
+        "HOST": os.environ.get("DB_HOST", "66.116.207.88"),        # noqa: F405
         "PORT": os.environ.get("DB_PORT", "3306"),             # noqa: F405
         "OPTIONS": {
             "init_command": "SET sql_mode='STRICT_TRANS_TABLES'",
