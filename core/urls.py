@@ -7,6 +7,7 @@ from django.conf.urls.static import static
 from django.views.static import serve
 from core.views.dashboard_views import HomepageDashboardView
 from django.views.generic.base import RedirectView
+from user.views import AddressListCreateAPIView, AddressRetrieveUpdateDestroyAPIView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -19,7 +20,6 @@ urlpatterns = [
     path('api/dashboard/', HomepageDashboardView.as_view(), name='homepage-dashboard'),
     path('api/shop/', include('shop.urls')),
     path('api/logistics/', include('logistics.api.urls')),
-    
     path(
         'feedback/',
         RedirectView.as_view(
@@ -27,7 +27,9 @@ urlpatterns = [
             permanent=False
         ),
         name='google-feedback-form'
-    ),     
+    ),
+    path('address/', AddressListCreateAPIView.as_view(), name='address_list_create'),
+    path('address/<int:address_id>/', AddressRetrieveUpdateDestroyAPIView.as_view(), name='address_detail_update_delete'),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -252,3 +252,34 @@ class Session(SoftDeleteMixin):
 
     def __str__(self):
         return f"Session [{self.user}] @ {self.ip_address} ({self.created_at:%Y-%m-%d %H:%M})"
+
+
+#--------------------------------------------
+   #Address
+#--------------------------------------------
+    
+class Address(SoftDeleteMixin):
+    user = models.ForeignKey(
+        CustomUser, on_delete=models.CASCADE, related_name="addresses",
+        db_index=True, verbose_name="User"
+    )
+    title = models.CharField(
+        max_length=50, blank=True, null=True, 
+        help_text="e.g., Home, Office, Other", verbose_name="Address Title"
+    )
+    street_address = models.TextField(verbose_name="Street Address")
+    city = models.CharField(max_length=100, verbose_name="City")
+    state = models.CharField(max_length=100, verbose_name="State")
+    pincode = models.CharField(max_length=20, verbose_name="Pincode")
+
+    class Meta:
+        db_table = "address"
+        verbose_name = "Address"
+        verbose_name_plural = "Addresses"
+        indexes = [
+            models.Index(fields=["user"]),
+            models.Index(fields=["is_deleted"]),
+        ]
+
+    def __str__(self):
+        return f"{self.title or 'Address'} - {self.user.username}"

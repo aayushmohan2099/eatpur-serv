@@ -1,14 +1,6 @@
 # user/urls.py
 from django.urls import path
-from .views import (
-    UserListAPIView, 
-    UserDetailAPIView,
-    UserCreateAPIView,
-    UserUpdateDestroyAPIView,
-    RoleListAPIView,
-    RoleCreateAPIView,
-    RoleRetrieveUpdateDestroyAPIView
-)
+from .views import *
 
 urlpatterns = [
     # 1, 2 & 3) User endpoints
@@ -21,4 +13,7 @@ urlpatterns = [
     path('roles/', RoleListAPIView.as_view(), name='role-list'),
     path('roles/create/', RoleCreateAPIView.as_view(), name='role-create'),
     path('roles/<int:pk>/', RoleRetrieveUpdateDestroyAPIView.as_view(), name='role-detail-update-delete'),
+
+    path('address/', AddressListCreateAPIView.as_view(), name='address_list_create'),
+    path('address/<int:address_id>/', AddressRetrieveUpdateDestroyAPIView.as_view(), name='address_detail_update_delete'),
 ]
