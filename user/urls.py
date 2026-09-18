@@ -14,6 +14,6 @@ urlpatterns = [
     path('roles/create/', RoleCreateAPIView.as_view(), name='role-create'),
     path('roles/<int:pk>/', RoleRetrieveUpdateDestroyAPIView.as_view(), name='role-detail-update-delete'),
 
-    path('address/', AddressListCreateAPIView.as_view(), name='address_list_create'),
-    path('address/<int:address_id>/', AddressRetrieveUpdateDestroyAPIView.as_view(), name='address_detail_update_delete'),
+    path('api/address/', AddressListCreateAPIView.as_view(), name='address_list_create'),
+    path('api/address/<int:address_id>/', AddressRetrieveUpdateDestroyAPIView.as_view(), name='address_detail_update_delete'),
 ]

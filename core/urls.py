@@ -28,8 +28,8 @@ urlpatterns = [
         ),
         name='google-feedback-form'
     ),
-    path('address/', AddressListCreateAPIView.as_view(), name='address_list_create'),
-    path('address/<int:address_id>/', AddressRetrieveUpdateDestroyAPIView.as_view(), name='address_detail_update_delete'),
+    path('api/address/', AddressListCreateAPIView.as_view(), name='address_list_create'),
+    path('api/address/<int:address_id>/', AddressRetrieveUpdateDestroyAPIView.as_view(), name='address_detail_update_delete'),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -51,6 +51,24 @@ class UserCreateUpdateSerializer(serializers.ModelSerializer):
 class AddressSerializer(serializers.ModelSerializer):
     class Meta:
         model = Address
-        fields = ['id', 'user', 'title', 'street_address', 'city', 'state', 'pincode', 'is_deleted']
-        
+       
+        fields = [
+            'id', 'user', 'title', 'consignee_name', 'consignee_phone', 
+            'consignee_alternate_phone', 'street_address', 'city', 'state', 
+            'pincode', 'is_deleted'
+        ]
         read_only_fields = ['user', 'is_deleted']
+
+   
+    def validate(self, data):
+        
+        phone = data.get('consignee_phone')
+        alt_phone = data.get('consignee_alternate_phone')
+
+        
+        if phone and alt_phone and phone == alt_phone:
+            raise serializers.ValidationError({
+                "consignee_alternate_phone": "Alternate phone number cannot be the same as the main phone number."
+            })
+        
+        return data
