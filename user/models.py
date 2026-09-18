@@ -255,7 +255,7 @@ class Session(SoftDeleteMixin):
 
 
 #--------------------------------------------
-   #Address
+# Address
 #--------------------------------------------
     
 class Address(SoftDeleteMixin):
@@ -267,6 +267,13 @@ class Address(SoftDeleteMixin):
         max_length=50, blank=True, null=True, 
         help_text="e.g., Home, Office, Other", verbose_name="Address Title"
     )
+    
+    # --- ---------------------------------- ---
+    consignee_name = models.CharField(max_length=255, verbose_name="Consignee Name", null=True, blank=True)
+    consignee_phone = models.CharField(max_length=15, verbose_name="Consignee Phone", null=True, blank=True)
+    consignee_alternate_phone = models.CharField(max_length=15, verbose_name="Alternate Phone", null=True, blank=True)
+    # --------------------------------------------
+
     street_address = models.TextField(verbose_name="Street Address")
     city = models.CharField(max_length=100, verbose_name="City")
     state = models.CharField(max_length=100, verbose_name="State")

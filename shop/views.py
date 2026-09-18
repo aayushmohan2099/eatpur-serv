@@ -17,11 +17,16 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
 
-from .serializers import CheckoutSerializer, VerifyPaymentSerializer
+from .serializers import (
+    CheckoutSerializer, 
+    VerifyPaymentSerializer, 
+    CustomerAddressSerializer
+)
 from .models import (
     SaleOrder, OrderProduct, OrderTransaction, 
     TransactionProcessor, TransactionStatus, Coupon
 )
+
 from inventory.models import Product, ProductStatus
 from logistics.models import EkartShipment, EkartAddress
 from logistics.utils.ekart_client import EkartClient, EkartAPIException
@@ -360,3 +365,38 @@ class RazorpayWebhookView(APIView):
 
         # Always return 200 OK to Razorpay so it stops retrying the webhook
         return Response(status=status.HTTP_200_OK)
+# ===========================================================================
+# ADMIN SPECIFIC API (Admin Dashboard ke liye)
+# ===========================================================================
+
+class AdminCustomerAddressHistoryView(APIView):
+    """
+    GET /api/shop/admin/customer-address-history/
+    Sirf Admin ke liye: Har customer ka order history (address par kitne orders hue).
+    """
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        orders = SaleOrder.objects.filter(is_deleted=False).order_by('-order_date')
+        serializer = CustomerAddressSerializer(orders, many=True)
+        grouped_addresses = {}
+
+        for i, address in enumerate(serializer.data):
+            name = (address.get('consignee_name') or "").strip().lower()
+            location = (address.get('drop_location') or "").strip().lower()
+            pincode = (address.get('drop_pincode') or "").strip()
+
+            address_key = (name, location, pincode)
+            
+            if address_key not in grouped_addresses:
+                address['order_count'] = 1
+                address['order_ids'] = [orders[i].id] 
+                grouped_addresses[address_key] = address
+            else:
+                grouped_addresses[address_key]['order_count'] += 1
+                grouped_addresses[address_key]['order_ids'].append(orders[i].id)
+                
+                if not grouped_addresses[address_key]['consignee_phone'] and address.get('consignee_phone'):
+                    grouped_addresses[address_key]['consignee_phone'] = address.get('consignee_phone')
+
+        return Response(list(grouped_addresses.values()), status=status.HTTP_200_OK)
