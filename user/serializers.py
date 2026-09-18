@@ -45,9 +45,12 @@ class UserCreateUpdateSerializer(serializers.ModelSerializer):
             validated_data['password'] = make_password(validated_data['password'])
         return super().update(instance, validated_data)
 
+# ===========================================================================
 # ADDRESS SERIALIZER
+# ===========================================================================
 class AddressSerializer(serializers.ModelSerializer):
     class Meta:
         model = Address
         fields = ['id', 'user', 'title', 'street_address', 'city', 'state', 'pincode', 'is_deleted']
-        read_only_fields = [ 'is_deleted']
+        
+        read_only_fields = ['user', 'is_deleted']
