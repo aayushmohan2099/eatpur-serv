@@ -5,6 +5,7 @@ Serializers for the shop & checkout flow.
 """
 
 from rest_framework import serializers
+from .models import SaleOrder
 
 class CheckoutItemSerializer(serializers.Serializer):
     product_id = serializers.IntegerField()
@@ -45,3 +46,24 @@ class VerifyPaymentSerializer(serializers.Serializer):
     razorpay_payment_id = serializers.CharField(max_length=255)
     razorpay_order_id = serializers.CharField(max_length=255)
     razorpay_signature = serializers.CharField(max_length=255)
+
+# ===========================================================================
+# ADMIN CUSTOMER ADDRESS SERIALIZER 
+# ===========================================================================
+
+class CustomerAddressSerializer(serializers.ModelSerializer):
+    """
+    Extracts delivery addresses from a customer's past orders.
+    Used by the Admin API to group order history by address.
+    """
+    class Meta:
+        model = SaleOrder
+        fields = [
+            'consignee_name', 
+            'consignee_phone', 
+            'consignee_alternate_phone', 
+            'drop_location', 
+            'drop_city', 
+            'drop_state', 
+            'drop_pincode'
+        ]
