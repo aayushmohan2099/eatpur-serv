@@ -113,18 +113,15 @@ class RoleRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
 
 class AddressListCreateAPIView(generics.ListCreateAPIView):
     """
-    GET: /addresses/?user_id=1 (Fetch specific user's addresses)
-    POST: Create a new address (Requires 'user' ID in JSON)
+    GET: /addresses/ (Fetch logged-in user's addresses automatically)
+    POST: Create a new address (Auto-assigned to logged-in user)
     """
     serializer_class = AddressSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [permissions.IsAuthenticated] # Changed to IsAuthenticated
 
     def get_queryset(self):
-        user_id = self.request.query_params.get('user_id')
-        if not user_id:
-            # Agar URL me user_id nahi hai, toh kuch return mat karo
-            return Address.objects.none()
-        return Address.objects.filter(user_id=user_id, is_deleted=False)
+        # Ab URL se ID lene ki zaroorat nahi, request.user se filter hoga
+        return Address.objects.filter(user=self.request.user, is_deleted=False)
 
     # Custom JSON format for GET Request
     def list(self, request, *args, **kwargs):
@@ -138,17 +135,11 @@ class AddressListCreateAPIView(generics.ListCreateAPIView):
 
     # Custom JSON format for POST Request
     def create(self, request, *args, **kwargs):
-        user_id = request.data.get('user')
-        if not user_id:
-            return Response({
-                "status": False,
-                "message": "User ID bhejna compulsory hai!",
-                "data": None
-            }, status=status.HTTP_400_BAD_REQUEST)
-
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        
+        # User explicitly pass karne ke badle request.user use kar rahe hain
+        serializer.save(user=self.request.user)
         
         return Response({
             "status": True,
@@ -162,12 +153,13 @@ class AddressRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView)
     GET, PUT, DELETE for a specific address using its ID
     """
     serializer_class = AddressSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [permissions.IsAuthenticated] # Changed to IsAuthenticated
     lookup_field = 'id'
     lookup_url_kwarg = 'address_id'
 
     def get_queryset(self):
-        return Address.objects.filter(is_deleted=False)
+        # User sirf apna hi address edit/delete kar payega
+        return Address.objects.filter(user=self.request.user, is_deleted=False)
 
     def perform_destroy(self, instance):
         ip = get_client_ip(self.request)
