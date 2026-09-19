@@ -347,3 +347,42 @@ class FrontPageBannerSerializer(serializers.ModelSerializer):
             'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']    
+# ===========================================================================
+# SetNewPasswordSerializer
+# ===========================================================================
+
+class SetNewPasswordSerializer(serializers.Serializer):
+    """
+    Validates and enforces rules on the new password without requiring the old one.
+    """
+    new_password = serializers.CharField(
+        write_only=True,
+        required=True,
+        min_length=8,
+        style={"input_type": "password"}
+    )
+    new_password_confirm = serializers.CharField(
+        write_only=True,
+        required=True,
+        style={"input_type": "password"}
+    )
+
+    def validate_new_password(self, value: str) -> str:
+        # Password strength rules
+        errors = []
+        if not any(c.isupper() for c in value):
+            errors.append("Must contain at least one uppercase letter.")
+        if not any(c.isdigit() for c in value):
+            errors.append("Must contain at least one digit.")
+        if not any(c in "!@#$%^&*()_+-=[]{}|;':\",./<>?" for c in value):
+            errors.append("Must contain at least one special character.")
+        if errors:
+            raise serializers.ValidationError(errors)
+        return value
+
+    def validate(self, attrs):
+        if attrs.get('new_password') != attrs.get('new_password_confirm'):
+            raise serializers.ValidationError(
+                {"new_password_confirm": "New passwords do not match."}
+            )
+        return attrs
