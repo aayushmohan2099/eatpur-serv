@@ -40,6 +40,7 @@ from security.captcha_image import generate_captcha_image
 from auth_app.models import *
 from core.mixins import get_client_ip
 from security.jwt_custom import get_tokens_for_user
+from .serializers import SetNewPasswordSerializer
 
 from .serializers import *
 
@@ -490,4 +491,43 @@ class FrontPageBannerViewSet(viewsets.ModelViewSet):
         return Response(
             {"message": "Banner successfully deleted."}, 
             status=status.HTTP_204_NO_CONTENT
-        )            
+        )  
+
+# ===========================================================================
+# SetNewPasswordView — POST /auth/set-password/
+# ===========================================================================
+
+class SetNewPasswordView(APIView):
+    """
+    POST /auth/set-password/
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        serializer = SetNewPasswordSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(
+                {"errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = request.user
+        new_password = serializer.validated_data["new_password"]
+
+        # Set new password
+        user.set_password(new_password)
+        
+        # Track who updated it
+        user.updated_by_ip = get_client_ip(request)
+        user.save(update_fields=["password", "updated_by_ip", "updated_at"])
+
+        logger.info(
+            "Password forcibly updated: user_id=%s ip=%s",
+            user.pk, get_client_ip(request),
+        )
+
+        return Response(
+            {"message": "Password updated successfully."},
+            status=status.HTTP_200_OK,
+        )

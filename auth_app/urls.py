@@ -21,6 +21,7 @@ Include in root urls.py:
 
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+from auth_app.views import SetNewPasswordView
 from .views import *
 
 router = DefaultRouter()
@@ -33,5 +34,6 @@ urlpatterns = [
     path("refresh/",  TokenRefreshView.as_view(),  name="auth-refresh"),
     path("register/", RegisterView.as_view(),      name="auth-register"),
     path("me/",       MeView.as_view(),            name="auth-me"),
+    path('set-password/', SetNewPasswordView.as_view(), name='set-password'),
     path('', include(router.urls)),
 ]
