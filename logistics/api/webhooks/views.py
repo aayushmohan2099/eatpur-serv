@@ -34,7 +34,7 @@ class EkartWebhookReceiverView(APIView):
         Verifies the Ekart webhook HMAC signature.
         Ekart usually passes this in the 'X-Ekart-Signature' or similar header.
         """
-        secret = getattr(settings, "EKART_WEBHOOK_SECRET", "").encode('utf-8')
+        secret = "EatPurEkartSecret2026!"
         if not secret:
             # If no secret is configured, bypass check (Not recommended for prod)
             return True
