@@ -75,10 +75,6 @@ class Coupon(SoftDeleteMixin):
     discount_type:
         PERCENT — reduce price by X%
         FLAT    — reduce price by a fixed currency amount
-
-    discount_value is always stored as a positive Decimal:
-        PERCENT → 0.00–100.00
-        FLAT    → absolute amount in the store currency
     """
 
     DISCOUNT_TYPE_CHOICES = [
@@ -117,6 +113,23 @@ class Coupon(SoftDeleteMixin):
         validators=[MinValueValidator(Decimal("0.01"))],
         verbose_name="Discount Value",
     )
+    
+    # -----------------------------------------------------------------------
+    # NEW FIELDS: For Auto-apply and Minimum Order Value logic
+    # -----------------------------------------------------------------------
+    min_order_value = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+        verbose_name="Minimum Order Value",
+        help_text="Minimum cart amount required to apply this coupon."
+    )
+    is_auto_apply = models.BooleanField(
+        default=False,
+        verbose_name="Auto Apply",
+        help_text="If True, this coupon is automatically applied at checkout if no manual code is provided by the user."
+    )
 
     class Meta:
         db_table = "coupon"
@@ -126,11 +139,11 @@ class Coupon(SoftDeleteMixin):
             models.Index(fields=["coupon_code"]),
             models.Index(fields=["start_date", "end_date"]),
             models.Index(fields=["status"]),
+            models.Index(fields=["is_auto_apply"]),
         ]
 
     def __str__(self):
         return f"{self.coupon_code} ({self.discount_type}: {self.discount_value})"
-
 
 # ===========================================================================
 # SaleOrder — Customer order

@@ -15,12 +15,13 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status, permissions
+from rest_framework import status, permissions, generics
 
 from .serializers import (
     CheckoutSerializer, 
     VerifyPaymentSerializer, 
-    CustomerAddressSerializer
+    CustomerAddressSerializer,
+     CouponSerializer
 )
 from .models import (
     SaleOrder, OrderProduct, OrderTransaction, 
@@ -400,3 +401,31 @@ class AdminCustomerAddressHistoryView(APIView):
                     grouped_addresses[address_key]['consignee_phone'] = address.get('consignee_phone')
 
         return Response(list(grouped_addresses.values()), status=status.HTTP_200_OK)
+
+# ===========================================================================
+# ADMIN SPECIFIC API: COUPON MANAGEMENT
+# ===========================================================================
+
+class AdminCouponListCreateView(generics.ListCreateAPIView):
+    """
+    GET /api/shop/admin/coupons/ - List all active coupons
+    POST /api/shop/admin/coupons/ - Create a new coupon
+    """
+    queryset = Coupon.objects.filter(is_deleted=False).order_by('-created_at')
+    serializer_class = CouponSerializer
+    permission_classes = [permissions.IsAdminUser]
+
+
+class AdminCouponDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """
+    GET /api/shop/admin/coupons/<id>/ - Get single coupon details
+    PUT/PATCH /api/shop/admin/coupons/<id>/ - Update coupon details
+    DELETE /api/shop/admin/coupons/<id>/ - Soft delete a coupon
+    """
+    queryset = Coupon.objects.filter(is_deleted=False)
+    serializer_class = CouponSerializer
+    permission_classes = [permissions.IsAdminUser]
+
+    def perform_destroy(self, instance):
+        # Calls the SoftDeleteMixin's delete() method to set is_deleted = True
+        instance.delete()

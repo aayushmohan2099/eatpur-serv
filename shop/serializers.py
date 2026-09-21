@@ -5,7 +5,11 @@ Serializers for the shop & checkout flow.
 """
 
 from rest_framework import serializers
-from .models import SaleOrder
+from .models import SaleOrder, Coupon, CouponStatus
+
+# ===========================================================================
+# CHECKOUT & PAYMENT SERIALIZERS
+# ===========================================================================
 
 class CheckoutItemSerializer(serializers.Serializer):
     product_id = serializers.IntegerField()
@@ -67,3 +71,42 @@ class CustomerAddressSerializer(serializers.ModelSerializer):
             'drop_state', 
             'drop_pincode'
         ]
+
+# ===========================================================================
+# ADMIN COUPON SERIALIZER 
+# ===========================================================================
+
+class CouponSerializer(serializers.ModelSerializer):
+    """
+    Serializer for Admin CRUD operations on Coupons.
+    """
+   
+    status_name = serializers.ChoiceField(
+        choices=[("ONGOING", "Ongoing"), ("EXPIRED", "Expired"), ("DRAFT", "Draft")],
+        write_only=True
+    )
+    
+    status = serializers.StringRelatedField(read_only=True)
+
+    class Meta:
+        model = Coupon
+        fields = [
+            'id', 'coupon_code', 'description', 'status', 'status_name', 
+            'start_date', 'end_date', 'discount_type', 'discount_value', 
+            'min_order_value', 'is_auto_apply', # Added the new fields here
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def create(self, validated_data):
+        status_name = validated_data.pop('status_name')
+        status_obj, _ = CouponStatus.objects.get_or_create(status_name=status_name)
+        validated_data['status'] = status_obj
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        status_name = validated_data.pop('status_name', None)
+        if status_name:
+            status_obj, _ = CouponStatus.objects.get_or_create(status_name=status_name)
+            instance.status = status_obj
+        return super().update(instance, validated_data)
