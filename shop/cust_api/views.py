@@ -1,3 +1,5 @@
+import requests
+from django.http import HttpResponse
 from rest_framework.generics import ListAPIView
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -7,6 +9,7 @@ from django.shortcuts import get_object_or_404
 
 from shop.models import SaleOrder
 from .serializers import CustomerOrderListSerializer, CustomerInvoiceListSerializer
+from logistics.utils.ekart_client import EkartClient, EkartAPIException
 
 class CustomerOrderListView(ListAPIView):
     """
@@ -79,64 +82,88 @@ class CustomerInvoiceDownloadView(APIView):
     """
     GET /api/shop/customer/invoices/<order_id>/download/
     
-    Returns a richly formatted JSON payload of the invoice. 
-    (In modern React stacks, returning JSON allows the frontend to render a beautiful, 
-    brand-matched printable component instantly without heavy backend PDF libraries).
+    Fetches the official invoice PDF from Ekart Logistics using their integrations API,
+    downloads the PDF from the provided GCP link, and returns it directly to the frontend.
     """
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, order_id):
-        # Strict security constraint: Only the owner can fetch their invoice
+        # Order MUST EXIST, be paid, and belong to the requesting user
         order = get_object_or_404(
             SaleOrder, 
             id=order_id, 
-            session__user=request.user, 
             payment_status="PAID", 
             is_deleted=False
         )
         
-        # Fetch related shipment for official invoice number if dispatched
+        # Fetch related shipment
         shipment = order.logistics_shipments.filter(is_deleted=False).first()
-        invoice_number = shipment.invoice_number if shipment else f"PROFORMA-{order.id}"
-        invoice_date = shipment.invoice_date.isoformat() if shipment and shipment.invoice_date else order.order_date.date().isoformat()
+        
+        if not shipment:
+            return Response(
+                {"error": "Shipment not yet created. Invoice unavailable."}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
 
-        # Calculate taxes strictly based on the snapshotted order amounts
-        total = float(order.total_amount)
-        taxable_val = round(total / 1.05, 2)
-        tax_val = round(total - taxable_val, 2)
+        # Search EkartTrackingEvents for the 24-character hex orderId in raw_payload
+        tracking_events = shipment.tracking_events.filter(is_deleted=False).order_by('-event_timestamp')
+        mongo_order_id = None
+        
+        for event in tracking_events:
+            payload = event.raw_payload or {}
+            # Look for the strict 24-character hex ID required by Ekart's invoice API
+            if "orderId" in payload and len(str(payload.get("orderId", ""))) == 24:
+                mongo_order_id = payload["orderId"]
+                break
+                
+        if not mongo_order_id:
+            return Response({
+                "error": "Internal logistics ID not yet synced. Please check back after tracking updates begin."
+            }, status=status.HTTP_400_BAD_REQUEST)
 
-        invoice_data = {
-            "company_info": {
-                "name": "Eatpur Naturals LLP",
-                "address": "Sec- 5/77, Vikas Nagar, Lucknow- 226022, U.P.",
-                "gstin": "09ABCDE1234F1Z5",
-                "email": "support@eatpur.in"
-            },
-            "customer_info": {
-                "name": order.consignee_name,
-                "phone": order.consignee_alternate_phone,
-                "address": f"{order.drop_location}, {order.drop_city}, {order.drop_state} - {order.drop_pincode}"
-            },
-            "invoice_details": {
-                "invoice_number": invoice_number,
-                "order_id": f"ORD-{order.id}",
-                "date": invoice_date,
-                "payment_status": order.payment_status,
-                "payment_mode": "Prepaid (Razorpay)"
-            },
-            "items": [
-                {
-                    "name": op.product.name,
-                    "quantity": op.quantity,
-                    "unit_price": float(op.price_at_purchase),
-                    "subtotal": float(op.subtotal)
-                } for op in order.order_products.select_related('product')
-            ],
-            "totals": {
-                "taxable_amount": taxable_val,
-                "tax_amount": tax_val,
-                "grand_total": total
+        client = EkartClient()
+        endpoint = "/integrations/order/invoice"
+        
+        # Ekart expects an array of objects.
+        # We pass the extracted MongoDB orderId from the webhook payload.
+        payload = [
+            {
+                "orderId": mongo_order_id 
             }
-        }
+        ]
 
-        return Response(invoice_data, status=status.HTTP_200_OK)
+        try:
+            response = client.request("POST", endpoint, payload=payload)
+            data = response.get("data", {})
+            
+            # Check for successful response and presence of the invoice_link
+            if response.get("status_code") == 200 and data.get("invoice_link"):
+                invoice_url = data.get("invoice_link")
+                
+                # Fetch the raw PDF bytes from Ekart's GCP storage bucket
+                pdf_response = requests.get(invoice_url, timeout=15)
+                
+                if pdf_response.status_code == 200:
+                    # Return the PDF file directly to the client
+                    http_response = HttpResponse(
+                        pdf_response.content, 
+                        content_type='application/pdf'
+                    )
+                    http_response['Content-Disposition'] = f'attachment; filename="Invoice-ORD-{order.id}.pdf"'
+                    return http_response
+                else:
+                    return Response(
+                        {"error": "Failed to download PDF from logistics provider."}, 
+                        status=status.HTTP_502_BAD_GATEWAY
+                    )
+                    
+            else:
+                return Response({
+                    "error": "Invoice generation failed or not ready.", 
+                    "details": data.get("failed_requests", data)
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+        except EkartAPIException as e:
+            return Response({"error": str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+        except requests.RequestException as e:
+            return Response({"error": "Error connecting to document storage."}, status=status.HTTP_502_BAD_GATEWAY)
