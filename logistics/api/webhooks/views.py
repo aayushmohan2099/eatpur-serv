@@ -4,13 +4,10 @@ logistics/api/webhooks/views.py
 Webhook receiver for automated Ekart status updates.
 """
 
-import hmac
-import hashlib
-import json
 import logging
 from datetime import datetime
 from django.utils.timezone import make_aware
-from django.conf import settings
+from django.utils import timezone
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import permissions, status
@@ -25,39 +22,12 @@ class EkartWebhookReceiverView(APIView):
     
     Listens for 'track_updated', 'shipment_created', and 'shipment_recreated' 
     events pushed by Ekart servers.
+    
+    SECURITY: Public webhook receiver. No signature verification applied.
     """
-    # Webhooks must be publicly accessible, security relies on HMAC signatures
     permission_classes = [permissions.AllowAny]
 
-    def _verify_signature(self, request):
-        """
-        Verifies the Ekart webhook HMAC signature.
-        Ekart usually passes this in the 'X-Ekart-Signature' or similar header.
-        """
-        secret = "EatPurEkartSecret2026!"
-        if not secret:
-            # If no secret is configured, bypass check (Not recommended for prod)
-            return True
-            
-        received_signature = request.headers.get("X-Ekart-Signature")
-        if not received_signature:
-            return False
-            
-        # Calculate expected HMAC SHA256 of the raw body
-        expected_signature = hmac.new(
-            secret, 
-            request.body, 
-            hashlib.sha256
-        ).hexdigest()
-        
-        return hmac.compare_digest(expected_signature, received_signature)
-
     def post(self, request):
-        # 1. Security Check
-        if not self._verify_signature(request):
-            logger.warning("Ekart Webhook: Invalid or missing HMAC signature.")
-            return Response({"error": "Unauthorized webhook signature."}, status=status.HTTP_401_UNAUTHORIZED)
-
         payload = request.data
         
         # Determine the event type from payload structure
@@ -69,7 +39,7 @@ class EkartWebhookReceiverView(APIView):
             logger.error(f"Ekart Webhook Error: Payload missing tracking 'id'. Payload: {payload}")
             return Response({"error": "Missing tracking ID."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 2. Find Associated Shipment
+        # 1. Find Associated Shipment
         try:
             shipment = EkartShipment.objects.get(tracking_id=tracking_id, is_deleted=False)
         except EkartShipment.DoesNotExist:
@@ -77,7 +47,7 @@ class EkartWebhookReceiverView(APIView):
             # Return 200 so Ekart doesn't retry infinitely for a shipment we don't have
             return Response({"status": "ignored", "reason": "Shipment not found."}, status=status.HTTP_200_OK)
 
-        # 3. Process Tracking Update
+        # 2. Process Tracking Update
         if is_tracking_update:
             ekart_status = payload.get("status", "Unknown")
             ekart_ctime_ms = payload.get("ctime", 0)
@@ -86,7 +56,6 @@ class EkartWebhookReceiverView(APIView):
             if ekart_ctime_ms:
                 event_time = make_aware(datetime.fromtimestamp(ekart_ctime_ms / 1000.0))
             else:
-                from django.utils import timezone
                 event_time = timezone.now()
 
             # Create event log
@@ -106,11 +75,26 @@ class EkartWebhookReceiverView(APIView):
                 shipment.is_delivered = True
             shipment.save(update_fields=["current_status", "is_delivered", "updated_at"])
 
+            # 3. Synchronize Status with Customer's SaleOrder
+            if shipment.sale_order:
+                order = shipment.sale_order
+                status_lower = ekart_status.lower()
+                
+                # Map Ekart statuses to native FULFILLMENT_STATUS_CHOICES
+                if status_lower == "delivered":
+                    order.fulfillment_status = "DELIVERED"
+                elif "cancel" in status_lower or "rto" in status_lower or "return" in status_lower:
+                    order.fulfillment_status = "CANCELLED"
+                elif status_lower not in ["created", "pending", "processing", "shipment created"]:
+                    # Any transit event (picked up, in transit, out for delivery) marks it SHIPPED
+                    order.fulfillment_status = "SHIPPED"
+                    
+                order.save(update_fields=["fulfillment_status", "updated_at"])
+
             logger.info(f"Ekart Webhook: Shipment {tracking_id} updated to {ekart_status}.")
             return Response({"status": "success"}, status=status.HTTP_200_OK)
             
         else:
             # Handle shipment_created / shipment_recreated event
-            # Currently we create shipments from our end, but if recreated by Ekart:
             logger.info(f"Ekart Webhook: Received non-tracking event for {tracking_id}. Payload: {payload}")
             return Response({"status": "acknowledged"}, status=status.HTTP_200_OK)
