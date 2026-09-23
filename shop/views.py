@@ -128,9 +128,11 @@ class CheckoutView(APIView):
         if total_amount < Decimal("1.00"):
             return Response({"error": "Minimum order value is ₹1.00"}, status=status.HTTP_400_BAD_REQUEST)
 
+        final_amount=valid_data['total_amount']
+
         # 3. Create SaleOrder & Store all Delivery Info
         sale_order = SaleOrder.objects.create(
-            total_amount=total_amount,
+            total_amount=final_amount,
             session=session_obj,
             coupon=applied_coupon,
             consignee_name=valid_data.get('consignee_name', ''),
@@ -162,7 +164,7 @@ class CheckoutView(APIView):
 
         # 4. Talk to Razorpay API
         razorpay_client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
-        amount_in_paise = int(total_amount * 100)
+        amount_in_paise = int(final_amount * 100)
 
         try:
             razorpay_order = razorpay_client.order.create({
