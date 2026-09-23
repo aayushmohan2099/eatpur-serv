@@ -176,16 +176,14 @@ class RegisterSerializer(serializers.ModelSerializer):
     Password rules
     --------------
     * Minimum 8 characters
-    * At least 1 uppercase letter
-    * At least 1 digit
-    * At least 1 special character
+   
 
     CAPTCHA is validated before any DB write.
     """
 
     password = serializers.CharField(
         write_only=True,
-        min_length=8,
+        min_length=4,
         trim_whitespace=False,
         style={"input_type": "password"},
     )
@@ -215,15 +213,7 @@ class RegisterSerializer(serializers.ModelSerializer):
     # ------------------------------------------------------------------
 
     def validate_password(self, value: str) -> str:
-        errors = []
-        if not any(c.isupper() for c in value):
-            errors.append("Must contain at least one uppercase letter.")
-        if not any(c.isdigit() for c in value):
-            errors.append("Must contain at least one digit.")
-        if not any(c in "!@#$%^&*()_+-=[]{}|;':\",./<>?" for c in value):
-            errors.append("Must contain at least one special character.")
-        if errors:
-            raise serializers.ValidationError(errors)
+       
         return value
 
     def validate_email(self, value):
@@ -358,7 +348,7 @@ class SetNewPasswordSerializer(serializers.Serializer):
     new_password = serializers.CharField(
         write_only=True,
         required=True,
-        min_length=8,
+        min_length=4,
         style={"input_type": "password"}
     )
     new_password_confirm = serializers.CharField(
@@ -368,16 +358,8 @@ class SetNewPasswordSerializer(serializers.Serializer):
     )
 
     def validate_new_password(self, value: str) -> str:
-        # Password strength rules
-        errors = []
-        if not any(c.isupper() for c in value):
-            errors.append("Must contain at least one uppercase letter.")
-        if not any(c.isdigit() for c in value):
-            errors.append("Must contain at least one digit.")
-        if not any(c in "!@#$%^&*()_+-=[]{}|;':\",./<>?" for c in value):
-            errors.append("Must contain at least one special character.")
-        if errors:
-            raise serializers.ValidationError(errors)
+       
+       
         return value
 
     def validate(self, attrs):
