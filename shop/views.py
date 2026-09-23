@@ -405,28 +405,42 @@ class AdminCustomerAddressHistoryView(APIView):
         return Response(list(grouped_addresses.values()), status=status.HTTP_200_OK)
 
 # ===========================================================================
-# ADMIN SPECIFIC API: COUPON MANAGEMENT
+# API: COUPON MANAGEMENT
 # ===========================================================================
 
 class AdminCouponListCreateView(generics.ListCreateAPIView):
     """
-    GET /api/shop/admin/coupons/ - List all active coupons
-    POST /api/shop/admin/coupons/ - Create a new coupon
+    GET /api/shop/admin/coupons/ - List all active coupons (For Everyone / Authenticated Users)
+    POST /api/shop/admin/coupons/ - Create a new coupon (For Admins Only)
     """
     queryset = Coupon.objects.filter(is_deleted=False).order_by('-created_at')
     serializer_class = CouponSerializer
-    permission_classes = [permissions.IsAdminUser]
+
+    def get_permissions(self):
+       
+        if self.request.method == 'GET':
+            return [permissions.IsAuthenticated()] 
+        
+        # POST requests are strictly for Admins
+        return [permissions.IsAdminUser()]
 
 
 class AdminCouponDetailView(generics.RetrieveUpdateDestroyAPIView):
     """
-    GET /api/shop/admin/coupons/<id>/ - Get single coupon details
-    PUT/PATCH /api/shop/admin/coupons/<id>/ - Update coupon details
-    DELETE /api/shop/admin/coupons/<id>/ - Soft delete a coupon
+    GET /api/shop/admin/coupons/<id>/ - Get single coupon details (For Everyone / Authenticated Users)
+    PUT/PATCH /api/shop/admin/coupons/<id>/ - Update coupon details (For Admins Only)
+    DELETE /api/shop/admin/coupons/<id>/ - Soft delete a coupon (For Admins Only)
     """
     queryset = Coupon.objects.filter(is_deleted=False)
     serializer_class = CouponSerializer
-    permission_classes = [permissions.IsAdminUser]
+
+    def get_permissions(self):
+      
+        if self.request.method == 'GET':
+            return [permissions.IsAuthenticated()]
+        
+        # PUT, PATCH, and DELETE requests are strictly for Admins
+        return [permissions.IsAdminUser()]
 
     def perform_destroy(self, instance):
         # Calls the SoftDeleteMixin's delete() method to set is_deleted = True
