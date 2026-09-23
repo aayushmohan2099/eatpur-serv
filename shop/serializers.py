@@ -22,6 +22,7 @@ class CheckoutSerializer(serializers.Serializer):
     """
     items = CheckoutItemSerializer(many=True, allow_empty=False)
     coupon_code = serializers.CharField(required=False, allow_blank=True)
+    total_amount = serializers.DecimalField(required=True, max_digits=14, decimal_places=2)
 
     # Customer Delivery Details (Saved to SaleOrder)
     consignee_name = serializers.CharField(max_length=255)
