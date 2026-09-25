@@ -23,7 +23,11 @@ class AdminOrderListView(ListAPIView):
     serializer_class = AdminSaleOrderListSerializer
 
     def get_queryset(self):
-        qs = SaleOrder.objects.filter(is_deleted=False).select_related('session__user').prefetch_related('order_products__product', 'logistics_shipments')
+        # YAHAN UPDATE HUA HAI: 'order_products__product__media' add kiya gaya hai fast image loading ke liye
+        qs = SaleOrder.objects.filter(is_deleted=False).select_related('session__user').prefetch_related(
+            'order_products__product__media', 
+            'logistics_shipments'
+        )
 
         # Core Filters
         payment_status = self.request.query_params.get('payment_status')
