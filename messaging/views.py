@@ -8,6 +8,7 @@ from .models import GoogleFormResponse
 @permission_classes([AllowAny])
 def google_form_webhook(request):
     GoogleFormResponse.objects.create(
+        stars=request.data.get("stars"),
         name=request.data.get("name"),
         mobile=request.data.get("mobile"),
         email=request.data.get("email"),
