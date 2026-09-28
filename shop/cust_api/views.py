@@ -172,50 +172,76 @@ class CustomerInvoiceDownloadView(APIView):
 
 class LocalInvoiceGenerateView(APIView):
     """
-    GET /api/shop/customer/invoices/<order_id>/generate-local/
-    
-  
+    GET /api/shop/customer/invoices/<order_id>/local-data/
+
+    Frontend ko invoice HTML render karne ke liye JSON data deta hai.
     """
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, order_id):
-       
+        # Order check karein
         order = get_object_or_404(
-            SaleOrder, 
-            id=order_id, 
-            session__user=request.user, 
-            payment_status="PAID", 
-            is_deleted=False
+            SaleOrder,
+            id=order_id,
+            session__user=request.user,
+            payment_status="PAID",
+            is_deleted=False,
         )
-        
-       
-        context = {
-            'order': order,
-            'customer': request.user,
-            'products': order.order_products.all(), 
+
+        # Order items ka data nikalna
+        items_data = []
+
+        for item in order.order_products.all():
+            # OrderProduct model mein unit_price nahi hai.
+            # Historical purchase price price_at_purchase mein stored hai.
+            price_value = float(item.price_at_purchase)
+
+            items_data.append({
+                "product_name": item.product.name if item.product else "Product",
+                "unit_price": price_value,
+                "quantity": item.quantity,
+                "taxable_amount": price_value * item.quantity,
+                "tax_rate": "0%",
+                "tax_type": "IGST",
+                "tax_amount": 0.0,
+                "subtotal": float(item.subtotal),
+            })
+
+        # Exact wahi JSON structure jo aapke React component ko chahiye
+        response_data = {
+            "company_info": {
+                "name": "Eatpur Naturals LLP",
+                "address": "5/77 Vikas Nagar Lucknow - 226022 Uttar Pradesh India",
+                "gstin": "09AAMFE9616Q1ZH",
+            },
+            "invoice_details": {
+                "invoice_number": f"INV-{order.id}",
+                "date": order.order_date.isoformat(),
+                "order_id": f"EP-{order.id}",
+                "payment_mode": (
+                    "Prepaid"
+                    if order.payment_status == "PAID"
+                    else "COD"
+                ),
+            },
+            "customer_info": {
+                "name": request.user.username,
+                
+                "address": "Customer Address Here",
+                "pincode": "000000",
+                "phone": getattr(request.user, "mobile", "N/A"),
+            },
+            "items": items_data,
+            "totals": {
+                "taxable_amount": float(order.total_amount),
+                "tax_amount": 0.0,
+                "discount": 0.0,
+                "grand_total": float(order.total_amount),
+                "amount_in_words": "Amount paid successfully",
+            },
         }
 
-       
-        try:
-            template = get_template('shop/invoice_template.html')
-        except Exception as e:
-            return Response({"error": "Invoice template not found."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            
-        html = template.render(context)
-
-      
-        response = HttpResponse(content_type='application/pdf')
-       
-        response['Content-Disposition'] = f'attachment; filename="Invoice-ORD-{order.id}.pdf"'
-
-       
-        pisa_status = pisa.CreatePDF(html, dest=response)
-
-       
-        if pisa_status.err:
-            return Response(
-                {"error": "Failed to generate local invoice PDF."}, 
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-        return response        
+        return Response(
+            response_data,
+            status=status.HTTP_200_OK,
+        )
