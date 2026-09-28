@@ -1,11 +1,13 @@
 import requests
 from django.http import HttpResponse
 from rest_framework.generics import ListAPIView
+from django.template.loader import get_template
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import permissions, status
 from django.utils.dateparse import parse_date
 from django.shortcuts import get_object_or_404
+from xhtml2pdf import pisa
 
 from shop.models import SaleOrder
 from .serializers import CustomerOrderListSerializer, CustomerInvoiceListSerializer
@@ -167,3 +169,53 @@ class CustomerInvoiceDownloadView(APIView):
             return Response({"error": str(e)}, status=status.HTTP_502_BAD_GATEWAY)
         except requests.RequestException as e:
             return Response({"error": "Error connecting to document storage."}, status=status.HTTP_502_BAD_GATEWAY)
+
+class LocalInvoiceGenerateView(APIView):
+    """
+    GET /api/shop/customer/invoices/<order_id>/generate-local/
+    
+  
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, order_id):
+       
+        order = get_object_or_404(
+            SaleOrder, 
+            id=order_id, 
+            session__user=request.user, 
+            payment_status="PAID", 
+            is_deleted=False
+        )
+        
+       
+        context = {
+            'order': order,
+            'customer': request.user,
+            'products': order.order_products.all(), 
+        }
+
+       
+        try:
+            template = get_template('shop/invoice_template.html')
+        except Exception as e:
+            return Response({"error": "Invoice template not found."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+        html = template.render(context)
+
+      
+        response = HttpResponse(content_type='application/pdf')
+       
+        response['Content-Disposition'] = f'attachment; filename="Invoice-ORD-{order.id}.pdf"'
+
+       
+        pisa_status = pisa.CreatePDF(html, dest=response)
+
+       
+        if pisa_status.err:
+            return Response(
+                {"error": "Failed to generate local invoice PDF."}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        return response        
