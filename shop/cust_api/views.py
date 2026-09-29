@@ -8,6 +8,9 @@ from rest_framework import permissions, status
 from django.utils.dateparse import parse_date
 from django.shortcuts import get_object_or_404
 from xhtml2pdf import pisa
+from num2words import num2words
+from django.utils import timezone
+import math
 
 from shop.models import SaleOrder
 from .serializers import CustomerOrderListSerializer, CustomerInvoiceListSerializer
@@ -173,13 +176,12 @@ class CustomerInvoiceDownloadView(APIView):
 class LocalInvoiceGenerateView(APIView):
     """
     GET /api/shop/customer/invoices/<order_id>/local-data/
-
     Frontend ko invoice HTML render karne ke liye JSON data deta hai.
     """
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, order_id):
-        # Order check karein
+        
         order = get_object_or_404(
             SaleOrder,
             id=order_id,
@@ -188,26 +190,88 @@ class LocalInvoiceGenerateView(APIView):
             is_deleted=False,
         )
 
-        # Order items ka data nikalna
-        items_data = []
+        order_products = order.order_products.select_related('product', 'coupon').all()
 
-        for item in order.order_products.all():
-            # OrderProduct model mein unit_price nahi hai.
-            # Historical purchase price price_at_purchase mein stored hai.
-            price_value = float(item.price_at_purchase)
+        
+        sum_of_all_items = 0.0
+        for item in order_products:
+            sum_of_all_items += float(item.price_at_purchase) * item.quantity
+
+        grand_total = float(order.total_amount)
+        
+        
+        global_discount = max(0.0, sum_of_all_items - grand_total)
+
+        items_data = []
+        total_taxable_amount = 0.0
+        total_tax_amount = 0.0
+
+        
+        for item in order_products:
+            unit_price_inclusive = float(item.price_at_purchase) 
+            quantity = item.quantity
+            item_total_inclusive = unit_price_inclusive * quantity
+            
+            
+            item_ratio = item_total_inclusive / sum_of_all_items if sum_of_all_items > 0 else 0
+            
+            
+            item_discount = global_discount * item_ratio
+            
+          
+            discounted_item_total = item_total_inclusive - item_discount
+
+            
+            tax_rate = float(item.tax_rate) if item.tax_rate else 5.0
+            
+            
+            divisor = 1 + (tax_rate / 100.0)
+            
+           
+            taxable_amount = round(discounted_item_total / divisor, 2)
+            tax_value = round(discounted_item_total - taxable_amount, 2)
+
+            total_taxable_amount += taxable_amount
+            total_tax_amount += tax_value
+
+            if item.product:
+                full_name = getattr(item.product, 'description', item.product.name)
+            else:
+                full_name = "Unknown Product"
+
+            applied_coupon = getattr(item.coupon, 'code', "None") if item.coupon else "None"
+
+           
+            unit_price_exclusive = round((discounted_item_total / quantity) / divisor, 2) if quantity else 0
 
             items_data.append({
-                "product_name": item.product.name if item.product else "Product",
-                "unit_price": price_value,
-                "quantity": item.quantity,
-                "taxable_amount": price_value * item.quantity,
-                "tax_rate": "0%",
+                "product_name": full_name,
+                "unit_price": unit_price_exclusive, 
+                
+                "quantity": quantity,
+                "item_discount": round(item_discount, 2), 
+                "taxable_amount": taxable_amount,
+                "tax_rate": f"{tax_rate}%",
+                "tax_value": tax_value,
                 "tax_type": "IGST",
-                "tax_amount": 0.0,
-                "subtotal": float(item.subtotal),
+                
+                "subtotal": round(discounted_item_total, 2), 
+                "applied_coupon": applied_coupon
             })
 
-        # Exact wahi JSON structure jo aapke React component ko chahiye
+        
+        rupees = math.floor(grand_total)
+        paise = int(round((grand_total - rupees) * 100))
+
+        rupees_text = num2words(rupees, lang='en_IN').title() + " Rupees"
+        if paise > 0:
+            amount_in_words = f"{rupees_text} And {num2words(paise, lang='en_IN').title()} Paise Only"
+        else:
+            amount_in_words = f"{rupees_text} Only"
+
+        formatted_order_date = order.order_date.strftime('%d-%m-%Y %I:%M %p') if order.order_date else "N/A"
+        formatted_invoice_date = timezone.now().strftime('%d-%m-%Y')  
+
         response_data = {
             "company_info": {
                 "name": "Eatpur Naturals LLP",
@@ -216,28 +280,28 @@ class LocalInvoiceGenerateView(APIView):
             },
             "invoice_details": {
                 "invoice_number": f"INV-{order.id}",
-                "date": order.order_date.isoformat(),
+                "date": formatted_invoice_date,      
+                "order_date": formatted_order_date,
                 "order_id": f"EP-{order.id}",
-                "payment_mode": (
-                    "Prepaid"
-                    if order.payment_status == "PAID"
-                    else "COD"
-                ),
+                "payment_mode": "Prepaid" if order.payment_status == "PAID" else "COD",
             },
             "customer_info": {
-                "name": request.user.username,
-                
-                "address": "Customer Address Here",
-                "pincode": "000000",
-                "phone": getattr(request.user, "mobile", "N/A"),
+                "name": order.consignee_name or request.user.username,
+                "address": order.drop_location or "N/A",
+                "city": order.drop_city or "N/A",
+                "state": order.drop_state or "N/A",
+                "country": "India", 
+                "pincode": order.drop_pincode or "N/A",
+                "phone": order.consignee_phone or getattr(request.user, "mobile", "N/A"),
             },
             "items": items_data,
             "totals": {
-                "taxable_amount": float(order.total_amount),
-                "tax_amount": 0.0,
-                "discount": 0.0,
-                "grand_total": float(order.total_amount),
-                "amount_in_words": "Amount paid successfully",
+                "total_mrp": round(sum_of_all_items, 2),
+                "taxable_amount": round(total_taxable_amount, 2),
+                "total_tax_amount": round(total_tax_amount, 2),
+                "discount": round(global_discount, 2),
+                "grand_total": round(grand_total, 2),
+                "amount_in_words": amount_in_words,
             },
         }
 

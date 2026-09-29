@@ -2,7 +2,7 @@
 shop/urls.py
 """
 from django.urls import path, include
-from .views import CheckoutView, VerifyPaymentView, RazorpayWebhookView, AdminCustomerAddressHistoryView, AdminCouponListCreateView, AdminCouponDetailView
+from .views import CheckoutView, VerifyPaymentView, RazorpayWebhookView, AdminCustomerAddressHistoryView, AdminCouponListCreateView, AdminCouponDetailView, AdminAnnouncementListCreateView, AdminAnnouncementDetailView, PublicAnnouncementListView
 
 urlpatterns = [
     path('checkout/', CheckoutView.as_view(), name='shop-checkout'),
@@ -13,5 +13,10 @@ urlpatterns = [
     path('admin/customer-address-history/', AdminCustomerAddressHistoryView.as_view(), name='admin_customer_address_history'),
     path('admin/coupons/', AdminCouponListCreateView.as_view(), name='admin-coupon-list-create'),
     path('admin/coupons/<int:pk>/', AdminCouponDetailView.as_view(), name='admin-coupon-detail'),
+    path('admin/announcements/', AdminAnnouncementListCreateView.as_view(), name='admin-announcement-list'),
+    path('admin/announcements/<int:pk>/',AdminAnnouncementDetailView.as_view(), name='admin-announcement-detail'),
+    
+        # --- Customer Announcement URLs ---
+    path('announcements/',PublicAnnouncementListView.as_view(), name='public-announcement-list'),
 
 ]

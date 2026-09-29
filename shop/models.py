@@ -239,14 +239,14 @@ class OrderProduct(SoftDeleteMixin):
     """
 
     sale_order = models.ForeignKey(
-        SaleOrder,
+        SaleOrder, 
         on_delete=models.CASCADE,
         related_name="order_products",
         db_index=True,
         verbose_name="Sale Order",
     )
     product = models.ForeignKey(
-        Product,
+        Product, 
         on_delete=models.SET_NULL,
         null=True,
         related_name="order_products",
@@ -254,13 +254,37 @@ class OrderProduct(SoftDeleteMixin):
         verbose_name="Product",
     )
 
+   
+    coupon = models.ForeignKey(
+        'Coupon',  
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="applied_order_products",
+        verbose_name="Applied Coupon"
+    )
+    tax_rate = models.DecimalField(
+        max_digits=5, 
+        decimal_places=2, 
+        default=0.00, 
+        verbose_name="Tax Rate (%)",
+        help_text="Tax percentage (e.g., 18.00 for 18% GST)"
+    )
+    tax_value = models.DecimalField(
+        max_digits=12, 
+        decimal_places=2, 
+        default=0.00, 
+        verbose_name="Tax Amount"
+    )
+    # --------------------------------------------
+
     quantity = models.PositiveIntegerField(
         default=1,
         validators=[MinValueValidator(1)],
         verbose_name="Quantity",
     )
 
-    # Snapshot prices — never read from Product after order is placed
+    
     price_at_purchase = models.DecimalField(
         max_digits=12, decimal_places=2, verbose_name="Price at Purchase"
     )
@@ -278,8 +302,10 @@ class OrderProduct(SoftDeleteMixin):
         ]
 
     def save(self, *args, **kwargs):
-        # Automatically compute subtotal before saving
+       
         self.subtotal = self.price_at_purchase * self.quantity
+        
+       
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -447,3 +473,19 @@ class OrderTransaction(SoftDeleteMixin):
 
     def __str__(self):
         return f"Tx[{self.transaction_id}] Order#{self.sale_order_id} — {self.status}"
+#====================================
+  #Announcement
+#====================================
+
+class Announcement(models.Model):
+    title = models.CharField(max_length=255)
+    message = models.TextField()
+    is_active = models.BooleanField(default=True) 
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.title
+    
+    class Meta:
+        ordering = ['-created_at']

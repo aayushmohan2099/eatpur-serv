@@ -31,6 +31,9 @@ from .models import (
 from inventory.models import Product, ProductStatus
 from logistics.models import EkartShipment, EkartAddress
 from logistics.utils.ekart_client import EkartClient, EkartAPIException
+from .models import Announcement
+from .serializers import AnnouncementSerializer
+ 
 
 logger = logging.getLogger("shop")
 
@@ -445,3 +448,43 @@ class AdminCouponDetailView(generics.RetrieveUpdateDestroyAPIView):
     def perform_destroy(self, instance):
         # Calls the SoftDeleteMixin's delete() method to set is_deleted = True
         instance.delete()
+
+# ==========================================
+# ADMIN VIEWS (Create, Read, Update, Delete)
+# ==========================================
+
+class AdminAnnouncementListCreateView(generics.ListCreateAPIView):
+    """
+    GET: List all announcements (Active + Inactive)
+    POST: Create a new announcement
+    """
+    queryset = Announcement.objects.all()
+    serializer_class = AnnouncementSerializer
+    permission_classes = [permissions.IsAdminUser] 
+
+
+class AdminAnnouncementDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """
+    GET: View single announcement
+    PUT/PATCH: Update announcement
+    DELETE: Delete announcement
+    """
+    queryset = Announcement.objects.all()
+    serializer_class = AnnouncementSerializer
+    permission_classes = [permissions.IsAdminUser]
+
+
+# ==========================================
+# CUSTOMER / USER VIEW (Read Only)
+# ==========================================
+
+class PublicAnnouncementListView(generics.ListAPIView):
+    """
+    GET: List all ACTIVE announcements for customers
+    """
+    
+    queryset = Announcement.objects.filter(is_active=True)
+    serializer_class = AnnouncementSerializer
+    
+   
+    permission_classes = [permissions.AllowAny]
