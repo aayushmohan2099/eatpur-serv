@@ -5,7 +5,7 @@ Serializers for the shop & checkout flow.
 """
 
 from rest_framework import serializers
-from .models import SaleOrder, Coupon, CouponStatus
+from .models import SaleOrder, Coupon, CouponStatus, Announcement
 
 # ===========================================================================
 # CHECKOUT & PAYMENT SERIALIZERS
@@ -111,3 +111,8 @@ class CouponSerializer(serializers.ModelSerializer):
             status_obj, _ = CouponStatus.objects.get_or_create(status_name=status_name)
             instance.status = status_obj
         return super().update(instance, validated_data)
+    
+class AnnouncementSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Announcement
+        fields = ['id', 'title', 'message', 'is_active', 'created_at', 'updated_at']

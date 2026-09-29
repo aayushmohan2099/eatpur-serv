@@ -86,7 +86,7 @@ class CreateShipmentView(APIView):
             "consignee_name": order.consignee_name,
             "consignee_alternate_phone": order.consignee_alternate_phone,
             "payment_mode": "Prepaid",
-            "total_amount": taxable_amount,
+            "total_amount": total_amount,
             "taxable_amount": taxable_amount,
             "tax_value": tax_value,
             "commodity_value": str(taxable_amount),
