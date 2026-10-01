@@ -21,19 +21,18 @@ from .serializers import (
     CheckoutSerializer, 
     VerifyPaymentSerializer, 
     CustomerAddressSerializer,
-     CouponSerializer
+    CouponSerializer,
+    AnnouncementSerializer
 )
 from .models import (
     SaleOrder, OrderProduct, OrderTransaction, 
-    TransactionProcessor, TransactionStatus, Coupon
+    TransactionProcessor, TransactionStatus, Coupon, Announcement
 )
 
 from inventory.models import Product, ProductStatus
 from logistics.models import EkartShipment, EkartAddress
 from logistics.utils.ekart_client import EkartClient, EkartAPIException
-from .models import Announcement
-from .serializers import AnnouncementSerializer
- 
+
 
 logger = logging.getLogger("shop")
 
@@ -108,6 +107,7 @@ class CheckoutView(APIView):
 
         # 2. Apply Coupon
         applied_coupon = None
+        
         if coupon_code:
             try:
                 applied_coupon = Coupon.objects.get(
@@ -117,16 +117,26 @@ class CheckoutView(APIView):
                     start_date__lte=timezone.now(),
                     end_date__gte=timezone.now()
                 )
-                
-                if applied_coupon.discount_type == "FLAT":
-                    total_amount -= applied_coupon.discount_value
-                elif applied_coupon.discount_type == "PERCENT":
-                    total_amount -= (total_amount * applied_coupon.discount_value / Decimal("100.00"))
-                
-                total_amount = max(Decimal("0.00"), total_amount)
-                
             except Coupon.DoesNotExist:
                 return Response({"error": "Invalid or expired coupon."}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+           
+            applied_coupon = Coupon.objects.filter(
+                discount_type="FLAT",
+                is_deleted=False,
+                status__status_name="ONGOING",
+                start_date__lte=timezone.now(),
+                end_date__gte=timezone.now()
+            ).first()
+
+        # Calculation (Manual or Auto-apply)
+        if applied_coupon:
+            if applied_coupon.discount_type == "FLAT":
+                total_amount -= applied_coupon.discount_value
+            elif applied_coupon.discount_type == "PERCENT":
+                total_amount -= (total_amount * applied_coupon.discount_value / Decimal("100.00"))
+            
+            total_amount = max(Decimal("0.00"), total_amount)
 
         if total_amount < Decimal("1.00"):
             return Response({"error": "Minimum order value is ₹1.00"}, status=status.HTTP_400_BAD_REQUEST)
@@ -371,6 +381,8 @@ class RazorpayWebhookView(APIView):
 
         # Always return 200 OK to Razorpay so it stops retrying the webhook
         return Response(status=status.HTTP_200_OK)
+
+
 # ===========================================================================
 # ADMIN SPECIFIC API (Admin Dashboard ke liye)
 # ===========================================================================
@@ -378,13 +390,14 @@ class RazorpayWebhookView(APIView):
 class AdminCustomerAddressHistoryView(APIView):
     """
     GET /api/shop/admin/customer-address-history/
-    Sirf Admin ke liye: Har customer ka order history (address par kitne orders hue).
+    
     """
     permission_classes = [permissions.IsAdminUser]
 
     def get(self, request):
         orders = SaleOrder.objects.filter(is_deleted=False).order_by('-order_date')
         serializer = CustomerAddressSerializer(orders, many=True)
+        
         grouped_addresses = {}
 
         for i, address in enumerate(serializer.data):
@@ -394,15 +407,32 @@ class AdminCustomerAddressHistoryView(APIView):
 
             address_key = (name, location, pincode)
             
+            current_order = orders[i]
+            
+           
+            is_paid = (current_order.payment_status == 'PAID') 
+            
             if address_key not in grouped_addresses:
-                address['order_count'] = 1
-                address['order_ids'] = [orders[i].id] 
+               
+                address['order_count'] = 1 if is_paid else 0
+                address['order_unpaid_count'] = 0 if is_paid else 1  
+                
+                
+                address['order_ids'] = [current_order.id] 
+                
                 grouped_addresses[address_key] = address
             else:
-                grouped_addresses[address_key]['order_count'] += 1
-                grouped_addresses[address_key]['order_ids'].append(orders[i].id)
                 
-                if not grouped_addresses[address_key]['consignee_phone'] and address.get('consignee_phone'):
+                if is_paid:
+                    grouped_addresses[address_key]['order_count'] += 1
+                else:
+                    grouped_addresses[address_key]['order_unpaid_count'] += 1 
+                
+                
+                grouped_addresses[address_key]['order_ids'].append(current_order.id)
+                
+                
+                if not grouped_addresses[address_key].get('consignee_phone') and address.get('consignee_phone'):
                     grouped_addresses[address_key]['consignee_phone'] = address.get('consignee_phone')
 
         return Response(list(grouped_addresses.values()), status=status.HTTP_200_OK)
