@@ -185,7 +185,7 @@ class LocalInvoiceGenerateView(APIView):
         order = get_object_or_404(
             SaleOrder,
             id=order_id,
-            session__user=request.user,
+            
             payment_status="PAID",
             is_deleted=False,
         )
