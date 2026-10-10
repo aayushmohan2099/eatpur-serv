@@ -80,6 +80,7 @@ class Coupon(SoftDeleteMixin):
     DISCOUNT_TYPE_CHOICES = [
         ("PERCENT", "Percentage Discount"),
         ("FLAT", "Flat Amount Discount"),
+        ("FREE_SHIPPING", "Free Shipping"),
     ]
 
     coupon_code = models.CharField(
@@ -103,14 +104,20 @@ class Coupon(SoftDeleteMixin):
     end_date = models.DateTimeField(db_index=True, verbose_name="Valid Until")
 
     discount_type = models.CharField(
-        max_length=10,
+        max_length=20,
         choices=DISCOUNT_TYPE_CHOICES,
         verbose_name="Discount Type",
+    )
+    coupon_type = models.CharField(
+            max_length=50, 
+            default="FLAT", 
+            verbose_name="Coupon Type", 
+           
     )
     discount_value = models.DecimalField(
         max_digits=10,
         decimal_places=2,
-        validators=[MinValueValidator(Decimal("0.01"))],
+        validators=[MinValueValidator(Decimal("0.00"))],
         verbose_name="Discount Value",
     )
     

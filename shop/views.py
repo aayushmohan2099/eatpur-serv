@@ -105,10 +105,14 @@ class CheckoutView(APIView):
             product_cache[item['product_id']] = product
             total_amount += (product.discounted_price * item['quantity'])
 
-        # 2. Apply Coupon
+        # 2. Apply Coupon & Shipping Logic
         applied_coupon = None
         
+        # Default shipping fee (Change this value based on your actual business logic)
+        shipping_fee = Decimal("50.00") 
+        
         if coupon_code:
+            # If the user manually enters a code, process it here (PERCENT will work here)
             try:
                 applied_coupon = Coupon.objects.get(
                     coupon_code=coupon_code, 
@@ -120,28 +124,44 @@ class CheckoutView(APIView):
             except Coupon.DoesNotExist:
                 return Response({"error": "Invalid or expired coupon."}, status=status.HTTP_400_BAD_REQUEST)
         else:
-           
+            # Auto-apply the best coupon (ONLY FLAT and FREE_SHIPPING. PERCENT is excluded from auto-apply)
             applied_coupon = Coupon.objects.filter(
-                discount_type="FLAT",
+                discount_type__in=["FLAT", "FREE_SHIPPING"],
+                is_auto_apply=True,
+                min_order_value__lte=total_amount,
                 is_deleted=False,
                 status__status_name="ONGOING",
                 start_date__lte=timezone.now(),
                 end_date__gte=timezone.now()
-            ).first()
+            ).order_by("-min_order_value", "-id").first()
 
         # Calculation (Manual or Auto-apply)
         if applied_coupon:
+            if total_amount < applied_coupon.min_order_value:
+                return Response(
+                    {"error": f"Minimum order value for this coupon is ₹{applied_coupon.min_order_value}."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Apply the specific discount logic based on coupon type
             if applied_coupon.discount_type == "FLAT":
                 total_amount -= applied_coupon.discount_value
             elif applied_coupon.discount_type == "PERCENT":
+                # This will execute if a user manually applies a PERCENT coupon
                 total_amount -= (total_amount * applied_coupon.discount_value / Decimal("100.00"))
+            elif applied_coupon.discount_type == "FREE_SHIPPING":
+                # Waive the shipping fee if a FREE_SHIPPING coupon is applied
+                shipping_fee = Decimal("0.00")
             
-            total_amount = max(Decimal("0.00"), total_amount)
+        # Add shipping fee to the total amount
+        total_amount += shipping_fee
+
+        total_amount = max(Decimal("0.00"), total_amount).quantize(Decimal("0.01"))
 
         if total_amount < Decimal("1.00"):
             return Response({"error": "Minimum order value is ₹1.00"}, status=status.HTTP_400_BAD_REQUEST)
 
-        final_amount=valid_data['total_amount']
+        final_amount = total_amount
 
         # 3. Create SaleOrder & Store all Delivery Info
         sale_order = SaleOrder.objects.create(
@@ -255,7 +275,7 @@ class VerifyPaymentView(APIView):
             return Response({"error": "Transaction not found."}, status=status.HTTP_404_NOT_FOUND)
 
         try:
-            # 1. Razorpay SDK Verification (Bypass for testing)
+            # 1. Razorpay SDK Verification (Bypass for testing via prefix)
             if not payment_id.startswith("pay_TEST_"):
                 razorpay_client.utility.verify_payment_signature({
                     'razorpay_order_id': order_id,
@@ -384,13 +404,13 @@ class RazorpayWebhookView(APIView):
 
 
 # ===========================================================================
-# ADMIN SPECIFIC API (Admin Dashboard ke liye)
+# ADMIN SPECIFIC API (For Admin Dashboard)
 # ===========================================================================
 
 class AdminCustomerAddressHistoryView(APIView):
     """
     GET /api/shop/admin/customer-address-history/
-    
+    Retrieves and groups the order history based on customer address information.
     """
     permission_classes = [permissions.IsAdminUser]
 
@@ -405,33 +425,34 @@ class AdminCustomerAddressHistoryView(APIView):
             location = (address.get('drop_location') or "").strip().lower()
             pincode = (address.get('drop_pincode') or "").strip()
 
+            # Unique key for grouping addresses
             address_key = (name, location, pincode)
             
             current_order = orders[i]
             
-           
+            # Check if the current order is paid
             is_paid = (current_order.payment_status == 'PAID') 
             
             if address_key not in grouped_addresses:
-               
+                # Initialize address metrics for the first time
                 address['order_count'] = 1 if is_paid else 0
                 address['order_unpaid_count'] = 0 if is_paid else 1  
                 
-                
+                # Keep a list of associated order IDs
                 address['order_ids'] = [current_order.id] 
                 
                 grouped_addresses[address_key] = address
             else:
-                
+                # Update metrics if address already exists in the group
                 if is_paid:
                     grouped_addresses[address_key]['order_count'] += 1
                 else:
                     grouped_addresses[address_key]['order_unpaid_count'] += 1 
                 
-                
+                # Append the current order ID
                 grouped_addresses[address_key]['order_ids'].append(current_order.id)
                 
-                
+                # Fallback to update phone number if it was missing previously
                 if not grouped_addresses[address_key].get('consignee_phone') and address.get('consignee_phone'):
                     grouped_addresses[address_key]['consignee_phone'] = address.get('consignee_phone')
 
@@ -450,11 +471,11 @@ class AdminCouponListCreateView(generics.ListCreateAPIView):
     serializer_class = CouponSerializer
 
     def get_permissions(self):
-       
+        # Allow any authenticated user to view the list of coupons
         if self.request.method == 'GET':
             return [permissions.IsAuthenticated()] 
         
-        # POST requests are strictly for Admins
+        # POST requests are strictly restricted to Admins
         return [permissions.IsAdminUser()]
 
 
@@ -468,11 +489,11 @@ class AdminCouponDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = CouponSerializer
 
     def get_permissions(self):
-      
+        # Allow any authenticated user to fetch single coupon details
         if self.request.method == 'GET':
             return [permissions.IsAuthenticated()]
         
-        # PUT, PATCH, and DELETE requests are strictly for Admins
+        # PUT, PATCH, and DELETE requests are strictly restricted to Admins
         return [permissions.IsAdminUser()]
 
     def perform_destroy(self, instance):
@@ -512,9 +533,6 @@ class PublicAnnouncementListView(generics.ListAPIView):
     """
     GET: List all ACTIVE announcements for customers
     """
-    
     queryset = Announcement.objects.filter(is_active=True)
     serializer_class = AnnouncementSerializer
-    
-   
     permission_classes = [permissions.AllowAny]
