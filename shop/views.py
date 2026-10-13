@@ -108,11 +108,11 @@ class CheckoutView(APIView):
         # 2. Apply Coupon & Shipping Logic
         applied_coupon = None
         
-        # Default shipping fee (Change this value based on your actual business logic)
-        shipping_fee = Decimal("50.00") 
+       
+        shipping_fee = Decimal("20.00") 
         
         if coupon_code:
-            # If the user manually enters a code, process it here
+           
             try:
                 applied_coupon = Coupon.objects.get(
                     coupon_code=coupon_code, 
@@ -164,17 +164,17 @@ class CheckoutView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # Apply the specific discount logic based on coupon type
+           
             if applied_coupon.discount_type == "FLAT":
                 total_amount -= applied_coupon.discount_value
             elif applied_coupon.discount_type == "PERCENT":
-                # This will execute if a user manually applies a PERCENT coupon
+               
                 total_amount -= (total_amount * applied_coupon.discount_value / Decimal("100.00"))
             elif applied_coupon.discount_type == "FREE_SHIPPING":
-                # Waive the shipping fee if a FREE_SHIPPING coupon is applied
+                
                 shipping_fee = Decimal("0.00")
             
-        # Add shipping fee to the total amount
+        
         total_amount += shipping_fee
 
         total_amount = max(Decimal("0.00"), total_amount).quantize(Decimal("0.01"))
