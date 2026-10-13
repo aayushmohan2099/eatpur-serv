@@ -108,11 +108,11 @@ class CheckoutView(APIView):
         # 2. Apply Coupon & Shipping Logic
         applied_coupon = None
         
-       
-        shipping_fee = Decimal("20.00") 
+        # Default shipping fee (Change this value based on your actual business logic)
+        shipping_fee = Decimal("50.00") 
         
         if coupon_code:
-           
+            # If the user manually enters a code OR clicks apply on frontend, process it here
             try:
                 applied_coupon = Coupon.objects.get(
                     coupon_code=coupon_code, 
@@ -123,11 +123,9 @@ class CheckoutView(APIView):
                 )
 
                 # ===================================================================
-                # NEW LOGIC: COUPON TYPE ARE  DECIDE THE CUPON BEHAVIOR
+                # LOGIC: CHECK ONE_TIME USAGE
                 # ===================================================================
-                
                 if applied_coupon.coupon_type.strip().upper() == 'ONE_TIME':
-                    
                     
                     has_used = SaleOrder.objects.filter(
                         coupon=applied_coupon,
@@ -144,19 +142,10 @@ class CheckoutView(APIView):
 
             except Coupon.DoesNotExist:
                 return Response({"error": "Invalid or expired coupon."}, status=status.HTTP_400_BAD_REQUEST)
-        else:
-            # Auto-apply the best coupon (ONLY FLAT and FREE_SHIPPING)
-            applied_coupon = Coupon.objects.filter(
-                discount_type__in=["FLAT", "FREE_SHIPPING"],
-                is_auto_apply=True,
-                min_order_value__lte=total_amount,
-                is_deleted=False,
-                status__status_name="ONGOING",
-                start_date__lte=timezone.now(),
-                end_date__gte=timezone.now()
-            ).order_by("-min_order_value", "-id").first()
+        
+       
 
-        # Calculation (Manual or Auto-apply)
+        # Calculation (Manual apply only)
         if applied_coupon:
             if total_amount < applied_coupon.min_order_value:
                 return Response(
@@ -164,17 +153,16 @@ class CheckoutView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-           
+            # Apply the specific discount logic based on coupon type
             if applied_coupon.discount_type == "FLAT":
                 total_amount -= applied_coupon.discount_value
             elif applied_coupon.discount_type == "PERCENT":
-               
                 total_amount -= (total_amount * applied_coupon.discount_value / Decimal("100.00"))
             elif applied_coupon.discount_type == "FREE_SHIPPING":
-                
+                # Waive the shipping fee if a FREE_SHIPPING coupon is applied
                 shipping_fee = Decimal("0.00")
             
-        
+        # Add shipping fee to the total amount
         total_amount += shipping_fee
 
         total_amount = max(Decimal("0.00"), total_amount).quantize(Decimal("0.01"))
@@ -390,9 +378,6 @@ class RazorpayWebhookView(APIView):
                         # Deduct Inventory
                         _fulfill_order(transaction_record.sale_order)
                         logger.info(f"Webhook marked order {order_id} as SUCCESS and fulfilled inventory.")
-                        
-                        # Note: We deliberately skip Auto-Dispatch here to avoid duplicate dispatch calls
-                        # if the webhook and frontend race each other. If webhook wins, Admin can manually dispatch.
                         
                 except OrderTransaction.DoesNotExist:
                     logger.error(f"Webhook received for unknown order: {order_id}")
