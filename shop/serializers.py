@@ -86,16 +86,13 @@ class CouponSerializer(serializers.ModelSerializer):
     Serializer for Admin CRUD operations on Coupons.
     """
     
-   
     status_name = serializers.ChoiceField(
         choices=[("ONGOING", "Ongoing"), ("EXPIRED", "Expired"), ("DRAFT", "Draft")],
         write_only=True
     )
     
-   
     status = serializers.StringRelatedField(read_only=True)
     
-   
     discount_value = serializers.DecimalField(
         max_digits=10, 
         decimal_places=2, 
@@ -105,28 +102,44 @@ class CouponSerializer(serializers.ModelSerializer):
     class Meta:
         model = Coupon
         fields = [
-            'id', 'coupon_code', 'description', 'status', 'status_name', 
+            'id', 'coupon_code','coupon_type', 'description', 'status', 'status_name', 
             'start_date', 'end_date', 'discount_type', 'coupon_type', 'discount_value', 
             'min_order_value', 'is_auto_apply',
             'created_at', 'updated_at'
         ]
-        # Allow passing 'coupon_type' in POST/PUT by removing it from read_only_fields
+        
         read_only_fields = ['id', 'created_at', 'updated_at']
 
     def create(self, validated_data):
-        # Extract status_name and fetch/create the corresponding CouponStatus object
+        
         status_name = validated_data.pop('status_name')
         status_obj, _ = CouponStatus.objects.get_or_create(status_name=status_name)
         validated_data['status'] = status_obj
         return super().create(validated_data)
 
     def update(self, instance, validated_data):
-        # Extract status_name if provided and update the corresponding CouponStatus object
+       
         status_name = validated_data.pop('status_name', None)
         if status_name:
             status_obj, _ = CouponStatus.objects.get_or_create(status_name=status_name)
             instance.status = status_obj
         return super().update(instance, validated_data)
+
+   
+    def to_representation(self, instance):
+       
+        data = super().to_representation(instance)
+        
+        val = data.get('discount_value')
+        d_type = data.get('discount_type')
+        
+        
+        if d_type == 'PERCENT' and val:
+            data['discount_value'] = f"{val}%"
+        elif d_type == 'FLAT' and val:
+            data['discount_value'] = f"{val}"
+            
+        return data
 
 
 # ===========================================================================

@@ -112,7 +112,7 @@ class CheckoutView(APIView):
         shipping_fee = Decimal("50.00") 
         
         if coupon_code:
-            # If the user manually enters a code, process it here (PERCENT will work here)
+            # If the user manually enters a code, process it here
             try:
                 applied_coupon = Coupon.objects.get(
                     coupon_code=coupon_code, 
@@ -121,10 +121,31 @@ class CheckoutView(APIView):
                     start_date__lte=timezone.now(),
                     end_date__gte=timezone.now()
                 )
+
+                # ===================================================================
+                # NEW LOGIC: COUPON TYPE ARE  DECIDE THE CUPON BEHAVIOR
+                # ===================================================================
+                
+                if applied_coupon.coupon_type.strip().upper() == 'ONE_TIME':
+                    
+                    
+                    has_used = SaleOrder.objects.filter(
+                        coupon=applied_coupon,
+                        payment_status='PAID',
+                        consignee_phone=request.user.mobile
+                    ).exists()
+
+                    if has_used:
+                        return Response(
+                            {"error": f"You have already used the coupon '{coupon_code}'. It is valid for one-time use only."},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                # ===================================================================
+
             except Coupon.DoesNotExist:
                 return Response({"error": "Invalid or expired coupon."}, status=status.HTTP_400_BAD_REQUEST)
         else:
-            # Auto-apply the best coupon (ONLY FLAT and FREE_SHIPPING. PERCENT is excluded from auto-apply)
+            # Auto-apply the best coupon (ONLY FLAT and FREE_SHIPPING)
             applied_coupon = Coupon.objects.filter(
                 discount_type__in=["FLAT", "FREE_SHIPPING"],
                 is_auto_apply=True,
