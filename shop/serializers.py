@@ -102,13 +102,14 @@ class CouponSerializer(serializers.ModelSerializer):
     class Meta:
         model = Coupon
         fields = [
-            'id', 'coupon_code','coupon_type', 'description', 'status', 'status_name', 
-            'start_date', 'end_date', 'discount_type', 'coupon_type', 'discount_value', 
+            'id', 'coupon_code', 'coupon_type', 'description', 'status', 'status_name', 
+            'start_date', 'end_date', 'discount_type', 'discount_value', 
             'min_order_value', 'is_auto_apply',
             'created_at', 'updated_at'
         ]
         
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        
+        read_only_fields = ['id', 'discount_type', 'is_auto_apply', 'created_at', 'updated_at']
 
     def create(self, validated_data):
         

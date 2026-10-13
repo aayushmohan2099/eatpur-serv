@@ -15,11 +15,11 @@ OrderTransaction    → payment attempt record with external tx ID and response
 
 Design Notes
 ------------
-* price_at_purchase on OrderProduct captures the price at order time,
+- price_at_purchase on OrderProduct captures the price at order time,
   decoupling order history from future product price changes.
-* OrderTransaction stores the full JSON response from the payment gateway
+- OrderTransaction stores the full JSON response from the payment gateway
   for audit, dispute resolution, and reconciliation.
-* session_id on both SaleOrder and OrderTransaction enables full
+- session_id on both SaleOrder and OrderTransaction enables full
   traceability from a user action through to payment.
 """
 
@@ -71,16 +71,19 @@ class CouponStatus(SoftDeleteMixin):
 class Coupon(SoftDeleteMixin):
     """
     Promotional discount code.
-
-    discount_type:
-        PERCENT — reduce price by X%
-        FLAT    — reduce price by a fixed currency amount
     """
 
     DISCOUNT_TYPE_CHOICES = [
         ("PERCENT", "Percentage Discount"),
         ("FLAT", "Flat Amount Discount"),
         ("FREE_SHIPPING", "Free Shipping"),
+    ]
+
+    COUPON_TYPE_CHOICES = [
+        ("FLAT", "Flat Discount"),
+        ("PERCENT", "Percentage Discount"),
+        ("FREE_SHIPPING", "Free Shipping"),
+        ("ONE_TIME", "One Time Use"),
     ]
 
     coupon_code = models.CharField(
@@ -106,13 +109,14 @@ class Coupon(SoftDeleteMixin):
     discount_type = models.CharField(
         max_length=20,
         choices=DISCOUNT_TYPE_CHOICES,
+        blank=True, 
         verbose_name="Discount Type",
     )
     coupon_type = models.CharField(
-            max_length=50, 
-            default="FLAT", 
-            verbose_name="Coupon Type", 
-           
+        max_length=50, 
+        choices=COUPON_TYPE_CHOICES,
+        default="FLAT", 
+        verbose_name="Coupon Type", 
     )
     discount_value = models.DecimalField(
         max_digits=10,
@@ -149,8 +153,30 @@ class Coupon(SoftDeleteMixin):
             models.Index(fields=["is_auto_apply"]),
         ]
 
+    def save(self, *args, **kwargs):
+       
+        if self.coupon_type == 'FLAT':
+            self.discount_type = 'FLAT'
+            self.is_auto_apply = True
+            
+        elif self.coupon_type == 'FREE_SHIPPING':
+            self.discount_type = 'FREE_SHIPPING'
+            self.is_auto_apply = True
+            self.discount_value = Decimal("0.00")
+            
+        elif self.coupon_type == 'PERCENT':
+            self.discount_type = 'PERCENT'
+            self.is_auto_apply = False
+            
+        elif self.coupon_type == 'ONE_TIME':
+            self.discount_type = 'PERCENT'
+            self.is_auto_apply = False
+
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return f"{self.coupon_code} ({self.discount_type}: {self.discount_value})"
+        return f"{self.coupon_code} ({self.coupon_type} - {self.discount_type}: {self.discount_value})"
+
 
 # ===========================================================================
 # SaleOrder — Customer order
@@ -261,9 +287,8 @@ class OrderProduct(SoftDeleteMixin):
         verbose_name="Product",
     )
 
-   
     coupon = models.ForeignKey(
-        'Coupon',  
+        Coupon,  
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -291,7 +316,6 @@ class OrderProduct(SoftDeleteMixin):
         verbose_name="Quantity",
     )
 
-    
     price_at_purchase = models.DecimalField(
         max_digits=12, decimal_places=2, verbose_name="Price at Purchase"
     )
@@ -309,10 +333,7 @@ class OrderProduct(SoftDeleteMixin):
         ]
 
     def save(self, *args, **kwargs):
-       
         self.subtotal = self.price_at_purchase * self.quantity
-        
-       
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -480,8 +501,10 @@ class OrderTransaction(SoftDeleteMixin):
 
     def __str__(self):
         return f"Tx[{self.transaction_id}] Order#{self.sale_order_id} — {self.status}"
+
+
 #====================================
-  #Announcement
+# Announcement
 #====================================
 
 class Announcement(models.Model):
