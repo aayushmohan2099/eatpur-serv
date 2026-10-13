@@ -90,9 +90,9 @@ class CheckoutView(APIView):
         session_obj = getattr(request, 'session_obj', None)
 
         # 1. Calculate Secure Total Amount
-        total_amount = Decimal("0.00")
+        total_amount = valid_data['total_amount']
         product_cache = {}
-
+        
         for item in items_data:
             try:
                 product = Product.objects.get(id=item['product_id'], is_deleted=False)
@@ -103,13 +103,14 @@ class CheckoutView(APIView):
                 return Response({"error": f"Insufficient stock for '{product.name}'. Only {product.quantity} left."}, status=status.HTTP_400_BAD_REQUEST)
 
             product_cache[item['product_id']] = product
-            total_amount += (product.discounted_price * item['quantity'])
+        
+
+        
 
         # 2. Apply Coupon & Shipping Logic
         applied_coupon = None
         
-        # Default shipping fee (Change this value based on your actual business logic)
-        shipping_fee = Decimal("50.00") 
+      
         
         if coupon_code:
             # If the user manually enters a code OR clicks apply on frontend, process it here
@@ -163,12 +164,7 @@ class CheckoutView(APIView):
                 shipping_fee = Decimal("0.00")
             
         # Add shipping fee to the total amount
-        total_amount += shipping_fee
-
-        total_amount = max(Decimal("0.00"), total_amount).quantize(Decimal("0.01"))
-
-        if total_amount < Decimal("1.00"):
-            return Response({"error": "Minimum order value is ₹1.00"}, status=status.HTTP_400_BAD_REQUEST)
+       
 
         final_amount = total_amount
 
