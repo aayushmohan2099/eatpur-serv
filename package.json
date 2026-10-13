@@ -1,0 +1,24 @@
+{
+  "name": "eatpur-serv",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aayushmohan2099/eatpur-serv.git"
+  },
+  "keywords": [],
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/aayushmohan2099/eatpur-serv/issues"
+  },
+  "homepage": "https://github.com/aayushmohan2099/eatpur-serv#readme",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.5",
+    "express": "^5.2.1"
+  }
+}
