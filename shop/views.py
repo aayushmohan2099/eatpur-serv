@@ -89,8 +89,9 @@ class CheckoutView(APIView):
         
         session_obj = getattr(request, 'session_obj', None)
 
-        # 1. Calculate Secure Total Amount
+        # 1. Validate products and calculate the pre-coupon subtotal for eligibility checks.
         total_amount = valid_data['total_amount']
+        cart_subtotal = Decimal("0.00")
         product_cache = {}
         
         for item in items_data:
@@ -103,17 +104,12 @@ class CheckoutView(APIView):
                 return Response({"error": f"Insufficient stock for '{product.name}'. Only {product.quantity} left."}, status=status.HTTP_400_BAD_REQUEST)
 
             product_cache[item['product_id']] = product
-        
+            cart_subtotal += product.discounted_price * item['quantity']
 
-        
-
-        # 2. Apply Coupon & Shipping Logic
+        # 2. Validate and associate the coupon; discount math stays on the frontend.
         applied_coupon = None
-        
-      
-        
+
         if coupon_code:
-            # If the user manually enters a code OR clicks apply on frontend, process it here
             try:
                 applied_coupon = Coupon.objects.get(
                     coupon_code=coupon_code, 
@@ -146,26 +142,14 @@ class CheckoutView(APIView):
         
        
 
-        # Calculation (Manual apply only)
         if applied_coupon:
-            if total_amount < applied_coupon.min_order_value:
+            if cart_subtotal < applied_coupon.min_order_value:
                 return Response(
                     {"error": f"Minimum order value for this coupon is ₹{applied_coupon.min_order_value}."},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # Apply the specific discount logic based on coupon type
-            if applied_coupon.discount_type == "FLAT":
-                total_amount -= applied_coupon.discount_value
-            elif applied_coupon.discount_type == "PERCENT":
-                total_amount -= (total_amount * applied_coupon.discount_value / Decimal("100.00"))
-            elif applied_coupon.discount_type == "FREE_SHIPPING":
-                # Waive the shipping fee if a FREE_SHIPPING coupon is applied
-                shipping_fee = Decimal("0.00")
-            
-        # Add shipping fee to the total amount
-       
-
+        # Coupon discounts are calculated by the frontend; persist its final amount as-is.
         final_amount = total_amount
 
         # 3. Create SaleOrder & Store all Delivery Info
