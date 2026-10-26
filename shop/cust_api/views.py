@@ -242,11 +242,9 @@ class LocalInvoiceGenerateView(APIView):
             applied_coupon = getattr(item.coupon, 'code', "None") if item.coupon else "None"
 
            
-            unit_price_exclusive = round((discounted_item_total / quantity) / divisor, 2) if quantity else 0
-
             items_data.append({
                 "product_name": full_name,
-                "unit_price": unit_price_exclusive, 
+                "unit_price": round(unit_price_inclusive, 2),
                 
                 "quantity": quantity,
                 "item_discount": round(item_discount, 2), 

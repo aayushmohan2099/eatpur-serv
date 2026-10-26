@@ -401,48 +401,56 @@ class AdminCustomerAddressHistoryView(APIView):
     permission_classes = [permissions.IsAdminUser]
 
     def get(self, request):
-        orders = SaleOrder.objects.filter(is_deleted=False).order_by('-order_date')
+        orders = list(
+            SaleOrder.objects.filter(is_deleted=False)
+            .select_related('session__user')
+            .order_by('-order_date')
+        )
         serializer = CustomerAddressSerializer(orders, many=True)
         
+        grouped_customers = {}
         grouped_addresses = {}
 
-        for i, address in enumerate(serializer.data):
+        for order, address in zip(orders, serializer.data):
+            customer = order.session.user if order.session_id else None
+            customer_id = customer.id if customer else None
+
+            if customer_id not in grouped_customers:
+                grouped_customers[customer_id] = {
+                    "customer_id": customer_id,
+                    "customer_name": customer.username if customer else "Guest",
+                    "customer_email": customer.email if customer else "N/A",
+                    "customer_phone": customer.mobile if customer else "N/A",
+                    "addresses": [],
+                }
+
             name = (address.get('consignee_name') or "").strip().lower()
             location = (address.get('drop_location') or "").strip().lower()
             pincode = (address.get('drop_pincode') or "").strip()
 
-            # Unique key for grouping addresses
             address_key = (name, location, pincode)
-            
-            current_order = orders[i]
-            
-            # Check if the current order is paid
-            is_paid = (current_order.payment_status == 'PAID') 
-            
-            if address_key not in grouped_addresses:
-                # Initialize address metrics for the first time
-                address['order_count'] = 1 if is_paid else 0
-                address['order_unpaid_count'] = 0 if is_paid else 1  
-                
-                # Keep a list of associated order IDs
-                address['order_ids'] = [current_order.id] 
-                
-                grouped_addresses[address_key] = address
-            else:
-                # Update metrics if address already exists in the group
-                if is_paid:
-                    grouped_addresses[address_key]['order_count'] += 1
-                else:
-                    grouped_addresses[address_key]['order_unpaid_count'] += 1 
-                
-                # Append the current order ID
-                grouped_addresses[address_key]['order_ids'].append(current_order.id)
-                
-                # Fallback to update phone number if it was missing previously
-                if not grouped_addresses[address_key].get('consignee_phone') and address.get('consignee_phone'):
-                    grouped_addresses[address_key]['consignee_phone'] = address.get('consignee_phone')
+            grouped_address_key = (customer_id, address_key)
+            grouped_address = grouped_addresses.get(grouped_address_key)
 
-        return Response(list(grouped_addresses.values()), status=status.HTTP_200_OK)
+            is_paid = order.payment_status == 'PAID'
+
+            if grouped_address is None:
+                address['order_count'] = 1 if is_paid else 0
+                address['order_unpaid_count'] = 0 if is_paid else 1
+                address['order_ids'] = [order.id]
+                grouped_customers[customer_id]["addresses"].append(address)
+                grouped_addresses[grouped_address_key] = address
+            else:
+                if is_paid:
+                    grouped_address['order_count'] += 1
+                else:
+                    grouped_address['order_unpaid_count'] += 1
+                grouped_address['order_ids'].append(order.id)
+
+                if not grouped_address.get('consignee_phone') and address.get('consignee_phone'):
+                    grouped_address['consignee_phone'] = address['consignee_phone']
+
+        return Response(list(grouped_customers.values()), status=status.HTTP_200_OK)
 
 # ===========================================================================
 # API: COUPON MANAGEMENT
