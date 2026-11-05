@@ -6,7 +6,7 @@ Authentication API views.
 Endpoints
 ---------
 GET    /auth/captcha/   → CaptchaView         — generate a fresh CAPTCHA challenge
-POST   /auth/login/     → LoginView           — CAPTCHA + credential check, return JWT pair
+POST   /auth/login/     → LoginView           — credential check, return JWT pair
 POST   /auth/logout/    → LogoutView          — blacklist refresh token, soft-delete session
 POST   /auth/refresh/   → TokenRefreshView    — rotate refresh token, issue new pair
 POST   /auth/register/  → RegisterView        — create account, return JWT pair
@@ -140,20 +140,20 @@ class LoginView(APIView):
     Body
     ----
     {
-        "username":       "john_doe" | "john@example.com",
-        "password":       "••••••••",
-        "captcha_id":     "<UUID from /auth/captcha/>",
-        "captcha_answer": "A3K9PX"
+        "username": "9876543210" | "john_doe" | "john@example.com",
+        "password": "••••••••"
     }
 
     Flow
     ----
-    1. Validate CAPTCHA  (DB lookup)
-    2. Check rate limit  (DB query)
-    3. Authenticate user (password check)
-    4. Create Session    (DB write)
-    5. Generate JWT pair with session_id in payload
-    6. Return encrypted response
+    CAPTCHA validation is currently disabled; login does not require
+    captcha_id or captcha_answer.
+
+    1. Check rate limit  (DB query)
+    2. Authenticate user (password check)
+    3. Create Session    (DB write)
+    4. Generate JWT pair with session_id in payload
+    5. Return encrypted response
 
     Success response (after decryption)
     ------------------------------------

@@ -4,7 +4,8 @@ auth_app/serializers.py
 Serializers for all auth endpoints.
 
 LoginSerializer
-    Validates captcha_id + captcha_answer + credentials in one pass.
+    Validates login credentials in one pass. CAPTCHA validation is currently
+    disabled; the existing fields and validation call remain commented out.
     Returns validated `user` object in validated_data.
 
 CaptchaSerializer
@@ -14,7 +15,7 @@ LogoutSerializer
     Accepts refresh token for blacklisting.
 
 RegisterSerializer
-    New user creation with password strength + captcha validation.
+    New user creation with mobile and password. (Old fields commented out).
 
 UserProfileSerializer
     Read-only user profile for GET /auth/me/.
@@ -51,29 +52,29 @@ class CaptchaResponseSerializer(serializers.Serializer):
 class LoginSerializer(serializers.Serializer):
     """
     Validates the full login payload in order:
-      1. CAPTCHA (DB lookup + expiry + one-time-use)
-      2. Rate limit check (DB query — no cache)
-      3. Credential check (username or email + password)
+      1. Rate limit check (DB query — no cache)
+      2. Credential check (username or email + password)
 
     On success, `validated_data["user"]` holds the authenticated CustomUser.
     """
 
     username = serializers.CharField(
         max_length=255,
-        help_text="Username or email address.",
+        help_text="Registered mobile number, username, or email address.",
     )
     password = serializers.CharField(
         write_only=True,
         trim_whitespace=False,
         style={"input_type": "password"},
     )
-    captcha_id = serializers.UUIDField(
-        help_text="UUID returned by GET /auth/captcha/",
-    )
-    captcha_answer = serializers.CharField(
-        max_length=10,
-        help_text="User's answer to the CAPTCHA challenge.",
-    )
+    # CAPTCHA is temporarily disabled for login; keep the fields for reuse.
+    # captcha_id = serializers.UUIDField(
+    #     help_text="UUID returned by GET /auth/captcha/",
+    # )
+    # captcha_answer = serializers.CharField(
+    #     max_length=10,
+    #     help_text="User's answer to the CAPTCHA challenge.",
+    # )
 
     # ------------------------------------------------------------------
     # Validation pipeline
@@ -84,10 +85,10 @@ class LoginSerializer(serializers.Serializer):
         ip = get_client_ip(request) if request else "0.0.0.0"
         identifier = attrs["username"].strip()
 
-        # ------ Step 1: CAPTCHA ------------------------------------------
-        self._validate_captcha(attrs["captcha_id"], attrs["captcha_answer"])
+        # CAPTCHA validation is temporarily disabled; retain for re-enabling.
+        # self._validate_captcha(attrs["captcha_id"], attrs["captcha_answer"])
 
-        # ------ Step 2: Rate limiting (DB) --------------------------------
+        # ------ Step 1: Rate limiting (DB) --------------------------------
         if LoginAttempt.is_blocked(ip):
             raise serializers.ValidationError(
                 {
@@ -98,16 +99,45 @@ class LoginSerializer(serializers.Serializer):
                 }
             )
 
-        # ------ Step 3: Credentials ----------------------------------------
+        # ------ Step 2: Credentials ----------------------------------------
         user = self._resolve_user(identifier)
 
-        if user is None or not user.check_password(attrs["password"]):
+        if user is None:
             # Record failure before raising — keeps count accurate
             LoginAttempt.record_failure(ip, identifier)
             logger.warning("Failed login attempt: identifier=%s ip=%s", identifier, ip)
             raise serializers.ValidationError(
-                {"non_field_errors": "Invalid credentials. Please check your username and password."}
+                {
+                    "username": (
+                        "No account was found with this phone number,. "
+                        "Please check it or create an account."
+                    )
+                }
             )
+
+        if not user.check_password(attrs["password"]):
+            LoginAttempt.record_failure(ip, identifier)
+            logger.warning("Failed login attempt: identifier=%s ip=%s", identifier, ip)
+            raise serializers.ValidationError(
+                {
+                    "password": (
+                        "The password is incorrect. Please try again or reset your password."
+                    )
+                }
+            )
+
+        # Previous combined response (kept for reference):
+        # if user is None or not user.check_password(attrs["password"]):
+        #     LoginAttempt.record_failure(ip, identifier)
+        #     logger.warning("Failed login attempt: identifier=%s ip=%s", identifier, ip)
+        #     raise serializers.ValidationError(
+        #         {
+        #             "non_field_errors": (
+        #                 "Phone number, username, email, or password is incorrect. "
+        #                 "Check your login details and try again."
+        #             )
+        #         }
+        #     )
 
         if not user.is_active:
             raise serializers.ValidationError(
@@ -142,13 +172,17 @@ class LoginSerializer(serializers.Serializer):
 
     @staticmethod
     def _resolve_user(identifier: str):
-        """Try username first, then email."""
+        """Try username, email, then the registered mobile number."""
         try:
             return CustomUser.objects.select_related("role").get(username=identifier)
         except CustomUser.DoesNotExist:
             pass
         try:
             return CustomUser.objects.select_related("role").get(email=identifier)
+        except CustomUser.DoesNotExist:
+            pass
+        try:
+            return CustomUser.objects.select_related("role").get(mobile=identifier)
         except CustomUser.DoesNotExist:
             return None
 
@@ -175,10 +209,7 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     Password rules
     --------------
-    * Minimum 8 characters
-   
-
-    CAPTCHA is validated before any DB write.
+    * Minimum 4 characters
     """
 
     password = serializers.CharField(
@@ -187,25 +218,34 @@ class RegisterSerializer(serializers.ModelSerializer):
         trim_whitespace=False,
         style={"input_type": "password"},
     )
-    password_confirm = serializers.CharField(
-        write_only=True,
-        trim_whitespace=False,
-        style={"input_type": "password"},
-    )
-    captcha_id = serializers.UUIDField(write_only=True)
-    captcha_answer = serializers.CharField(max_length=10, write_only=True)
+    
+    # --- COMMENTED OUT FOR MOBILE + SINGLE PASSWORD ONLY ---
+    # password_confirm = serializers.CharField(
+    #     write_only=True,
+    #     trim_whitespace=False,
+    #     style={"input_type": "password"},
+    # )
+    # captcha_id = serializers.UUIDField(write_only=True)
+    # captcha_answer = serializers.CharField(max_length=10, write_only=True)
 
     class Meta:
         model = CustomUser
+        
+        # --- COMMENTED OUT OLD FIELDS ---
+        # fields = [
+        #     "username",
+        #     "email",
+        #     "mobile",
+        #     "age",
+        #     "password",
+        #     "password_confirm",
+        #     "captcha_id",
+        #     "captcha_answer",
+        # ]
+        
         fields = [
-            "username",
-            "email",
             "mobile",
-            "age",
             "password",
-            "password_confirm",
-            "captcha_id",
-            "captcha_answer",
         ]
 
     # ------------------------------------------------------------------
@@ -213,19 +253,18 @@ class RegisterSerializer(serializers.ModelSerializer):
     # ------------------------------------------------------------------
 
     def validate_password(self, value: str) -> str:
-       
         return value
 
-    def validate_email(self, value):
-        if CustomUser.objects.filter(email=value).exists():
-            raise serializers.ValidationError("Email already registered.")
-        return value
+    # --- COMMENTED OUT UNUSED VALIDATORS ---
+    # def validate_email(self, value):
+    #     if CustomUser.objects.filter(email=value).exists():
+    #         raise serializers.ValidationError("Email already registered.")
+    #     return value
 
-
-    def validate_username(self, value):
-        if CustomUser.objects.filter(username=value).exists():
-            raise serializers.ValidationError("Username already taken.")
-        return value
+    # def validate_username(self, value):
+    #     if CustomUser.objects.filter(username=value).exists():
+    #         raise serializers.ValidationError("Username already taken.")
+    #     return value
 
 
     def validate_mobile(self, value):
@@ -244,14 +283,15 @@ class RegisterSerializer(serializers.ModelSerializer):
     # ------------------------------------------------------------------
 
     def validate(self, attrs):
-        # CAPTCHA first
-        LoginSerializer._validate_captcha(attrs["captcha_id"], attrs["captcha_answer"])
+        # --- COMMENTED OUT OLD VALIDATIONS ---
+        # # CAPTCHA first
+        # LoginSerializer._validate_captcha(attrs["captcha_id"], attrs["captcha_answer"])
 
-        # Password match
-        if attrs["password"] != attrs["password_confirm"]:
-            raise serializers.ValidationError(
-                {"password_confirm": "Passwords do not match."}
-            )
+        # # Password match
+        # if attrs["password"] != attrs["password_confirm"]:
+        #     raise serializers.ValidationError(
+        #         {"password_confirm": "Passwords do not match."}
+        #     )
 
         return attrs
 
@@ -260,9 +300,11 @@ class RegisterSerializer(serializers.ModelSerializer):
     # ------------------------------------------------------------------
 
     def create(self, validated_data: dict) -> CustomUser:
-        validated_data.pop("password_confirm")
-        validated_data.pop("captcha_id")
-        validated_data.pop("captcha_answer")
+        # --- COMMENTED OUT OLD POPS ---
+        # validated_data.pop("password_confirm")
+        # validated_data.pop("captcha_id")
+        # validated_data.pop("captcha_answer")
+        
         password = validated_data.pop("password")
         customer_role = Role.objects.get(role_name="CUSTOMER")
         validated_data["role"] = customer_role
@@ -272,6 +314,8 @@ class RegisterSerializer(serializers.ModelSerializer):
         user = CustomUser(
             created_by_ip=ip,
             updated_by_ip=ip,
+            # Ensure the required username field is populated by defaulting to mobile
+            username=validated_data.get("mobile"),
             **validated_data,
         )
         user.set_password(password)
