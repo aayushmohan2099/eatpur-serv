@@ -260,3 +260,39 @@ class GoogleFormResponse (SoftDeleteMixin):
 
     def __str__(self):
         return f"GoogleFormResponse for Msg#{self.email} — {self.response_description}"
+    
+# ===========================================================================
+ #Farmer Contact Model
+# ===========================================================================
+class FarmerContact(SoftDeleteMixin):
+    name = models.CharField(max_length=255, verbose_name="Name")
+    mobile = models.CharField(max_length=20, verbose_name="Mobile Number")
+    address = models.TextField(verbose_name="Address")
+    
+    member_count = models.PositiveIntegerField(
+        null=True, blank=True, verbose_name="Family/Team Member Count"
+    )
+    cultivated_area = models.CharField(
+        max_length=100, null=True, blank=True, 
+        verbose_name="Cultivated Area (e.g., 5 Acres)"
+    )
+    major_crop = models.CharField(
+        max_length=255, null=True, blank=True, verbose_name="Major Crop"
+    )
+    crop_of_interest = models.CharField(
+        max_length=255, null=True, blank=True, verbose_name="Crop of Interest"
+    )
+    status = models.CharField(
+        max_length=50,
+        default="Application Received",
+        verbose_name="Status",
+    )
+
+    class Meta:
+        db_table = "farmer_contacts"
+        verbose_name = "Farmer Contact"
+        verbose_name_plural = "Farmer Contacts"
+
+    def __str__(self):
+        return f"{self.name} ({self.mobile}) - {self.status}"
+      

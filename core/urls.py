@@ -20,6 +20,7 @@ urlpatterns = [
     path('api/dashboard/', HomepageDashboardView.as_view(), name='homepage-dashboard'),
     path('api/shop/', include('shop.urls')),
     path('api/logistics/', include('logistics.api.urls')),
+    path('messaging/', include('messaging.urls')),
     path(
         'feedback/',
         RedirectView.as_view(
