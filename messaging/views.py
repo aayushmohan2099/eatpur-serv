@@ -1,7 +1,10 @@
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework.response import Response
 from .models import GoogleFormResponse
+from rest_framework import viewsets
+from .models import FarmerContact
+from .serializers import FarmerContactSerializer
 
 
 @api_view(["POST"])
@@ -40,3 +43,23 @@ def get_all_reviews(request):
         "total_reviews": reviews.count(),
         "data": list(reviews)
     })
+# ===========================================================================
+# New Farmer Contact CRUD API
+# ===========================================================================
+
+class FarmerContactViewSet(viewsets.ModelViewSet):
+    """
+    A viewset for viewing and editing farmer contact instances.
+    - GET /api/contacts/ (List all - Everyone)
+    - POST /api/contacts/ (Create new - Everyone)
+    - GET /api/contacts/{id}/ (Retrieve one - Everyone)
+    - PUT/PATCH /api/contacts/{id}/ (Update - Admin only)
+    - DELETE /api/contacts/{id}/ (Delete - Admin only)
+    """
+    queryset = FarmerContact.objects.all().order_by('-id')
+    serializer_class = FarmerContactSerializer
+
+    def get_permissions(self):
+        if self.action in ['update', 'partial_update', 'destroy']:
+            return [IsAdminUser()]
+        return [AllowAny()]

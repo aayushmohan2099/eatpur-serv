@@ -13,7 +13,7 @@ def generate_captcha_image(text: str) -> str:
     # ✅ Use bold font (same as your example)
     try:
         font = ImageFont.truetype(
-            "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf", 48
+            "arialbd.ttf", 48
         )
     except:
         font = ImageFont.load_default()

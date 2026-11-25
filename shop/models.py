@@ -157,7 +157,7 @@ class Coupon(SoftDeleteMixin):
        
         if self.coupon_type == 'FLAT':
             self.discount_type = 'FLAT'
-            self.is_auto_apply = True
+            self.is_auto_apply = False
             
         elif self.coupon_type == 'FREE_SHIPPING':
             self.discount_type = 'FREE_SHIPPING'

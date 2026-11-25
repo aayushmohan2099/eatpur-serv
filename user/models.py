@@ -5,10 +5,10 @@ Authentication system: Roles, Users (AbstractBaseUser), and Sessions.
 
 Design decisions
 ----------------
-* CustomUser extends AbstractBaseUser for full control over auth fields.
-* Roles are stored as strings (not ENUM) for flexibility and easy migration.
-* Sessions capture rich device/geo metadata per request.
-* All tables participate in soft-delete via SoftDeleteMixin.
+- CustomUser extends AbstractBaseUser for full control over auth fields.
+- Roles are stored as strings (not ENUM) for flexibility and easy migration.
+- Sessions capture rich device/geo metadata per request.
+- All tables participate in soft-delete via SoftDeleteMixin.
 """
 
 import uuid
@@ -67,26 +67,48 @@ class CustomUserManager(BaseUserManager):
     identifier instead of username.
     """
 
-    def _create_user(self, username, email, mobile, password, **extra_fields):
-        if not email:
-            raise ValueError("Email is required.")
+    # OLD CODE: 
+    # def _create_user(self, username, email, mobile, password, **extra_fields):
+    # NEW CODE: email is now optional and moved to kwargs default
+    def _create_user(self, username, mobile, password, email=None, **extra_fields):
+        # OLD CODE:
+        # if not email:
+        #     raise ValueError("Email is required.")
+        
         if not username:
             raise ValueError("Username is required.")
-        email = self.normalize_email(email)
+            
+        if email:
+            email = self.normalize_email(email)
+            
         user = self.model(username=username, email=email, mobile=mobile, **extra_fields)
         user.set_password(password)  # hashes with PBKDF2 by default
         user.save(using=self._db)
         return user
 
-    def create_user(self, username, email, mobile, password=None, **extra_fields):
+    # OLD CODE:
+    # def create_user(self, username, email, mobile, password=None, **extra_fields):
+    # NEW CODE:
+    def create_user(self, username, mobile, password=None, email=None, **extra_fields):
         extra_fields.setdefault("is_staff", False)
         extra_fields.setdefault("is_superuser", False)
-        return self._create_user(username, email, mobile, password, **extra_fields)
+        
+        # OLD CODE:
+        # return self._create_user(username, email, mobile, password, **extra_fields)
+        # NEW CODE:
+        return self._create_user(username, mobile, password, email, **extra_fields)
 
-    def create_superuser(self, username, email, mobile, password, **extra_fields):
+    # OLD CODE:
+    # def create_superuser(self, username, email, mobile, password, **extra_fields):
+    # NEW CODE:
+    def create_superuser(self, username, mobile, password, email=None, **extra_fields):
         extra_fields["is_staff"] = True
         extra_fields["is_superuser"] = True
-        return self._create_user(username, email, mobile, password, **extra_fields)
+        
+        # OLD CODE:
+        # return self._create_user(username, email, mobile, password, **extra_fields)
+        # NEW CODE:
+        return self._create_user(username, mobile, password, email, **extra_fields)
 
     def get_queryset(self):
         return super().get_queryset().filter(is_deleted=False)
@@ -123,9 +145,17 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     username = models.CharField(
         max_length=150, unique=True, db_index=True, verbose_name="Username"
     )
+    
+    # OLD CODE:
+    # email = models.EmailField(
+    #     max_length=255, unique=True, db_index=True, verbose_name="Email"
+    # )
+    # NEW CODE: Added null=True, blank=True to make email optional
     email = models.EmailField(
-        max_length=255, unique=True, db_index=True, verbose_name="Email"
+        max_length=255, unique=True, db_index=True, verbose_name="Email",
+        null=True, blank=True
     )
+    
     mobile = models.CharField(
         max_length=20, unique=True, db_index=True, verbose_name="Mobile Number"
     )
@@ -166,7 +196,11 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     all_objects = AllUsersManager()
 
     USERNAME_FIELD = "username"
-    REQUIRED_FIELDS = ["email", "mobile"]
+    
+    # OLD CODE:
+    # REQUIRED_FIELDS = ["email", "mobile"]
+    # NEW CODE: Removed email from required fields
+    REQUIRED_FIELDS = ["mobile"]
 
     class Meta:
         db_table = "user"
@@ -181,7 +215,11 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
         ]
 
     def __str__(self):
-        return f"{self.username} <{self.email}>"
+        # OLD CODE:
+        # return f"{self.username} <{self.email}>"
+        # NEW CODE: Handle cases where email is None
+        email_str = f" <{self.email}>" if self.email else ""
+        return f"{self.username}{email_str}"
 
     def soft_delete(self, ip=None):
         from django.utils import timezone
@@ -289,4 +327,8 @@ class Address(SoftDeleteMixin):
         ]
 
     def __str__(self):
+        # OLD CODE:
+        # return f"{self.title or 'Address'}
+        # {self.user.username}"
+        # NEW CODE: formatting fixed to single line
         return f"{self.title or 'Address'} - {self.user.username}"
