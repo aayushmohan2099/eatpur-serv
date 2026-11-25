@@ -67,6 +67,28 @@ def _fulfill_order(sale_order):
     sale_order.save(update_fields=['payment_status', 'fulfillment_status', 'updated_at'])
 
 
+def _get_auto_applied_free_shipping_coupon(cart_subtotal):
+    """
+    Return the best eligible free-shipping coupon, or None.
+    Other coupon types are never auto-applied.
+    """
+    now = timezone.now()
+    return (
+        Coupon.objects.filter(
+            is_deleted=False,
+            is_auto_apply=True,
+            coupon_type='FREE_SHIPPING',
+            discount_type='FREE_SHIPPING',
+            status__status_name='ONGOING',
+            start_date__lte=now,
+            end_date__gte=now,
+            min_order_value__lte=cart_subtotal,
+        )
+        .order_by('-min_order_value', '-start_date', 'id')
+        .first()
+    )
+
+
 # ===========================================================================
 # PHASE 2: RAZORPAY ORDER CREATION
 # ===========================================================================
@@ -139,6 +161,8 @@ class CheckoutView(APIView):
 
             except Coupon.DoesNotExist:
                 return Response({"error": "Invalid or expired coupon."}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            applied_coupon = _get_auto_applied_free_shipping_coupon(cart_subtotal)
         
        
 
@@ -224,6 +248,10 @@ class CheckoutView(APIView):
             "currency": "INR",
             "key_id": settings.RAZORPAY_KEY_ID,
             "sale_order_id": sale_order.id,
+            "applied_coupon": {
+                "coupon_code": applied_coupon.coupon_code,
+                "coupon_type": applied_coupon.coupon_type,
+            } if applied_coupon else None,
             "customer": {
                 "name": request.user.username,
                 "email": request.user.email,
